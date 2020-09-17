@@ -91,13 +91,13 @@ In kernel density estimation (KDE), one takes a non-parametric approach to estim
 
 where, $\boldsymbol\mu_t \equiv (\mu_{1,t}, \mu_{2,t})'$, $k$ represents the kernel (often assumed to be Gaussian) and the parameters $b_1$ and $b_2$ are bandwidth parameters that control the diffuseness of the kernel.  As the bandwidth increases, the smoothness of the KDE increases.  Overly smooth estimates will not reveal any patterns in the distribution giving rise to the SPP but estimates that are not smooth enough will be too noisy to provide meaningful inference. Many approaches exist for setting or estimating $b_1$ and $b_2$.  Most commonly, a default bandwidth is calculated for each margin (i.e., latitude and longitude) as $0.9$ times the minimum of the sample standard deviation and the interquartile range divided by $1.34$ times the sample size to the negative one-fifth power.  Of course, many alternative methods exist for setting an appropriate bandwidth (e.g., cross-validation), but the method described above works well for Gaussian kernels and many datasets.  Although the UD is often not estimated in a parametric framework, the estimated density function serves as a basis from which many important space use metrics are calculated. 
 
-Treating the mountain lion telemetry data as an observed SPP, we calculated the KDE:
+Treating the mountain lion telemetry data as an observed SPP, we calculated the KDE ussing the function `kde2d`. This function calculates density in a grid. We have to pass to it the desired number of grid points in each direction (`n`), and the limits of the rectangle covered by the grid (`lims`). To define these values we will use the dimensions of an elevation raster map (`elevation.rast`) for the area covered by the GPS data
 
 ```{r, fig.height=5}
 library(raster)
 library(MASS)
 source("gray.colors.rev.R")
-mtnlion.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2], 
+m.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2], 
                      n = 4 * c(ncol(elevation.rast), 
                                nrow(elevation.rast)), 
                      lims = c(min(grid.centers[,1]), 
@@ -106,13 +106,91 @@ mtnlion.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2],
                               max(grid.centers[,2]))
                      )
 
-image(mtnlion.kde, col = gray.colors.rev(100, start=.2), 
-      cex.axis=1.2, cex.lab=1.5, asp=TRUE)
-points(mtnlion.df[,1:2], pch=19, col=rgb(0,0,0,alpha=.4))
+image(m.kde, col = gray.colors.rev(100, start = 0.2), 
+      cex.axis = 1.2, cex.lab = 1.2, asp = TRUE)
 
+points(mtnlion.df[,1:2], pch = 19, col = rgb(0,0,0, alpha = 0.4))
 ```
 
 The estimated UD in this example indicates that the individual mountain lion likely uses space differentially, with at least two main regions of higher intensity use in the study area.  Furthermore, there appears to be at least one telemetry observation that is distant from the regions of highest intensity use (leftmost point in the figure above), perhaps due to a foray into a neighboring individual's territory.
+
+
+##Home Range
+
+The conventional definition of a home range was put forth by \cite{Burt:43} as "area traversed by an individual in its normal activities of food gathering, mating, and caring for young.  Occasional sallies outside the area, perhaps exploratory in nature, should not be considered part of the home range."  \cite{PowellMitchell:12} point out that, like many other ecological concepts, the home range is difficult to characterize.  Nonetheless, many researchers still wish to estimate the home range despite it being somewhat abstract.  Mathematically, we can think of the home range, under Burt's definition, as a nonlinear feature in multidimensional space that serves as a semi-permeable boundary to movement.  Inside the boundary, the space use pattern (i.e., the UD) may represent a complicated cognitive map of the environment perceived by the individual (e.g., \citealt{Borger:08}).  Hence, a suite of nonparametric tools have been used to learn about the home range.  For example, the concept of an individual home range is often quantified as the 95\% isopleth (or density contour containing 95\% of the mass) of the estimated UD $\hat{f}$. Alternatively, convex hull (or minimum convex polygon) approaches have been used as a mathematical object that bounds a set of telemetry locations.  Development of home range estimation methods has expanded rapidly in recent years (e.g., \citealt{Getz:07}; \citealt{LaverKelly:08}; \citealt{Lyons:13}).  While home range estimation methods have become popular in animal space use studies, there has been no consensus on which approaches are best.            
+
+The term home range has come under substantial scrutiny in recent years.  At one point, the phrase "home range model" was used as a catchall for animal movement models in general.  The home range is an emergent feature of a complicated set of animal movement outcomes and rarely a strict geographic perimeter that the individual delineates.\footnote{With the possible exception of true physical constraints such as fenced regions or a very strong territorial effect in a confined space.}  For our purposes, we consider the home range as a subset of geographic space that an individual animal is most likely to be found in.  Fundamentally, the home range is an individual-based spatial topological feature.  It can be estimated using many different approaches, each carrying their own assumptions about the individual's life history and interaction with the environment.  A feature of the home range commonly of interest is the size of the home range, often measured in area.  All home range estimation methods allow for the estimation of area enclosed by the boundary.
+
+While home range estimation is not our focus, it can be useful for defining the spatial support of animal movement process.  The support of the point process is critical for most point process modeling approaches.  As previously mentioned, two of the most commonly used techniques for estimating the home range are 1.) a large isopleth of a KDE and 2.) a convex hull of the telemetry data.  An isopleth of the UD (or KDE of the UD) is essentially a contour line, or more formally, a line drawn through all of the points on a surface that have the same density value.  For example, by convention, the 95\% isopleth of a KDE delineates the region that contains 95\% of the total density.  A convex hull[^2] is the smallest polygon containing all of the telemetry points by connecting the "outside" points while having no acute interior angles (i.e., no interior angles less than 90 degrees).
+
+[^2]:(A convex hull is often referred to as a maximum convex polygon (MCP) in the animal ecology literature.)
+
+Returning to the mountain lion example in the previous section, let's look at different estimation methods. First, we can use the function `chull` to obtain a convex hull.
+
+```{r}
+library(raster)
+library(MASS)
+library(here)
+source("gray.colors.rev.R")
+source("draw.contour.2.R")
+
+load(here("data", "mtnlion_rsf.RData"))
+
+m.chull <- chull(mtnlion.df$UTM_X, mtnlion.df$UTM_Y)
+m.chull <- c(m.chull, m.chull[1])
+
+plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
+     xlab = "Easting", ylab = "Northing",
+     asp = 1, pch = 19, col = rgb(0,0,0, alpha = 0.4), cex = 1.2)
+
+lines(mtnlion.df[m.chull,1:2], lwd=3, col=rgb(0,0,0, alpha = 0.6))
+```
+
+Now let's look at a KDE at different isoplets densities. Firts we fit the KDE as before
+
+```{r}
+m.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2], 
+                     n = 4 * c(ncol(elevation.rast), 
+                               nrow(elevation.rast)), 
+                     lims = c(min(grid.centers[,1]), 
+                              max(grid.centers[,1]), 
+                              min(grid.centers[,2]), 
+                              max(grid.centers[,2]))
+                     )
+```
+
+We can see that the object created by `kde2d` contains $x$ and $y$ coordinates, and density $z$:
+```{r}
+str(m.kde)
+```
+
+To get the limits for the desired isoplets, we need to:
+- sort the $z$ values from high to low, 
+- calculate their cummulative sum, 
+- scale it to max = 1, 
+- find the points that determine the desired isoplet, and plot them
+
+```{r}
+alpha <- 0.95
+z <- sort(m.kde$z, decreasing = TRUE)
+cz <- cumsum(z)
+cz <- cz/max(cz)
+crit.val <- z[max(which(cz <= alpha))]
+b.full <- contourLines(m.kde, levels = crit.val)
+iso <- cbind(b.full[[1]]$x, b.full[[1]]$y) 
+
+plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
+     xlab = "Easting", ylab = "Northing",
+     ylim = range(grid.centers[,2]), 
+     xlim = range(grid.centers[,1]),
+     asp = 1, pch = 19, col = rgb(0,0,0, alpha = 0.4), cex = 1.2)
+
+lines(iso, lwd = 3, col = rgb(0,0,0, alpha = 0.6))
+```
+
+
+For example, the KDE isopleth increases in size as the percentage of the isopleth increases.  The 95\% KDE isopleth in Figure~\ref{fig:mtnlion_HR}a is sufficiently small that the dominant region of space in the estimated home range does not include one of the telemetry observations.  In fact, at the 95\% level, there are two distinct regions of space, but we only plot the dominant one (i.e., the one with larger area) for illustration here.  Figure~\ref{fig:mtnlion_HR}d illustrates that, in this case, the convex hull estimate of the mountain lion home range is substantially smaller than the KDE isopleth estimates and captures all of the telemetry data.  The researcher must decide which type of home range estimator to use if inference for the home range is desired.  The convex hull method is less subjective, but some would argue that it is also less realistic.     
+
 
 ## References
 
