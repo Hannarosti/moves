@@ -1,0 +1,119 @@
+---
+title: "UD and HR"
+author: "jmm"
+date: "8/28/2020"
+output:
+  html_document
+fontsize: 12pt
+bibliography: moves.bib
+---
+
+```{r, echo=FALSE}
+library(knitr)
+options(figure_counter = FALSE)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+```
+
+## Points in Space
+
+The basic concept in spatial point processes (SPP) is that the locations associated with an observed SPP are the random quantities of interest. In a 2-D spatial setting, where the size ($n$) of the SPP is known, we can formulate a basic model for an SPP with data represented by location vectors $\mathbf{s}_i$ (containing the coordinates in some geographic space) such that $\mathbf{s}_i \sim f(\mathbf{s})$ for $i=1,\ldots,n$ and with support[^1] $\mathbf{s}_i \in \cal{S}$.  The probability density function (PDF) $f$ stochastically controls the placement of the points $\mathbf{s}_i$, as it would for any other random variable.  In the situation where $n$ is unknown before observing the SPP, the size of the SPP is also random, and thus, part of the overall random process that arises. 
+
+Let's see for example data from a mountain lion *Puma concolor* in Colorado, USA.  
+```{r}
+library(here)
+load(here("data", "mtnlion_rsf.RData"))
+plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
+     xlab = "Easting", ylab = "Northing",
+     asp = 1, pch = 19, col = rgb(0,0,0, 0.4), cex = 1.2)
+```
+
+The data were used in an example by @Hooten:13b, and represent $91$ positions observed every $3$ hours over a period of approximately 11 days for an adult mountain lion. Telemetry data, such as those shown above, are often treated as spatial point process data, but doing so relies on several assumptions that we discuss in more detail as they arise.
+
+### Homogeneous Spatial Point Processes
+
+If an SPP arises from a uniform probability distribution over $\cal{S}$, then it is called homogeneous, implying that the density giving rise to the points does not vary over the support $\cal{S}$.  These SPPs are commonly referred to as "complete spatial random" (CSR) processes in the spatial statistics literature and they are often used as a null model for testing whether the observed SPP arises from a probability distribution with spatially varying density.  
+
+[^1]: ("Support" is the term used in statistics to describe the space where the random variable lives; or in other words, the values that $\mathbf{s}_i$ can take on)
+
+It is often simpler to describe point processes in terms of how they are simulated, rather than how they may be formally specified in the statistical literature.  For example, consider the homogeneous Poisson SPP, where the size of the SPP is an unknown random variable as well as the actual locations of the points.  To simulate the homogeneous Poisson SPP in a statistical software is a trivial two-step procedure: 
+
+1. Sample $n \sim \text{Poison}(\lambda)$
+2. Sample $\mathbf{s}_i \sim \text{Uniform}(\cal{S})$ for $i=1,\ldots,n$. 
+
+The intensity parameter $\lambda$ is set *a priori* and equal to the expected size of the point process (i.e., $E(n)=\lambda$).  The resulting set of points $\mathbf{S}\equiv(\mathbf{s}_1,\ldots,\mathbf{s}_n)'$ are a realization from a homogeneous Poisson spatial point process (they will also be CSR).  
+
+Let's simulate a couple of independent realizations (i.e., random sets of points) from a two-dimensional CSR Poisson SPP with intensity $\lambda=100$
+
+```{r, fig.height=4, fig.width=6.5}
+set.seed(123)
+
+lambda = 100
+n = rpois(2, lambda = lambda)
+x1 = runif(n[1], min = 0, max = 1)
+y1 = runif(n[1], min = 0, max = 1)
+x2 = runif(n[2], min = 0, max = 1)
+y2 = runif(n[2], min = 0, max = 1)
+
+op = par(mfrow = c(1,2), bty = "l", las = 1)
+plot(x1, y1, 
+     xlab = "Easting", ylab = "Northing",
+     asp = 1, pch = 19, col = rgb(0,0,0, 0.4), cex = 1)
+rect(0,0,1,1)
+plot(x2, y2, 
+     xlab = "Easting", ylab = "Northing",
+     asp = 1, pch = 19, col = rgb(0,0,0, 0.4), cex = 1)
+rect(0,0,1,1)
+
+```
+
+In this case, the first simulated point process $\mathbf{S}_1$ contained $n_1=94$ observations (Figure~\ref{fig:csr_sim}a), whereas the second ($\mathbf{S}_2$) contained $n_2=111$ observations.  We can see that both simulated point processes are different and show a somewhat "random" organization of spatial positions.  They tend to occur throughout the spatial support (i.e., the unit square), but are neither regular (i.e., perfectly spaced out) nor clustered (i.e., grouped tightly together).     
+
+Few real SPPs are actually thought to be homogeneous in space.  Rather, as previously mentioned, we merely leverage our ability to easily simulate CSR processes so that we can compare their behavior with our observed SPPs.  
+
+
+## Space Use
+
+There may not be another topic in quantitative ecology that is as mystifying and misunderstood as the study of space use and resource selection.  Our goal here is to describe the topic and various approaches for inference, while making both historical and contemporary connections between methods.  We begin by describing the concept of space use in the context of spatial point processes and then build on that with the concept of resource selection.  This perspective is somewhat new in ecology, as many of the approaches seem to have been developed in different fields over time, but as you will see, it provides a fully rigorous approach for modeling certain types of telemetry data.    
+
+Space use is the result of an animal movement process.  Thus, most space use studies seek to better understand where an individual (or individuals) spent their time. The dynamics of individual movement can be high dimensional but are most often considered from a two-dimensional perspective. The true individual locations $\boldsymbol\mu_i$, for a finite set of times $t_i$ ($i=1,\ldots,n$), are often considered to represent a spatial point process.  Under this interpretation, the $\boldsymbol\mu_i$ are considered to be random vectors before they are observed, but fixed and known quantities after they are observed and are then treated as response data.  
+
+In space use studies, it is often of interest to understand the distribution from which the individual locations arose.  That is, we assume that some multivariate distribution exists, and gives rise to $\boldsymbol\mu_i$.  In the two-dimensional case, this can be thought of as a probability density function in space, $[\boldsymbol\mu_i]$.  The animal ecology literature refers to this spatial density function as the **utilization distribution**, or **UD** for short. 
+
+Our goal is to use the individual locations ($\boldsymbol\mu_i$) to learn about the spatial probability distribution that gave rise to them. An estimate for the PDF $f(\boldsymbol\mu)$ based on an observed SPP is a common form of desired inference.  In such cases, there are a variety of parametric and non-parametric approaches to estimate the density of a SPP and they depend on the desired form of inference and utility.  One of the most commonly used non-parametric methods is called kernel density estimation and has a long history of use in a variety of applications [@Diggle:85; @Cressie:93].       
+
+In kernel density estimation (KDE), one takes a non-parametric approach to estimating $f$, whereby, for any location of interest $\mathbf{c}\equiv(c_1,c_2)'$ in the spatial domain ${\cal S}$, the estimate of the density function that gives rise to a point process is:
+
+\begin{equation}
+  \hat{f}(\mathbf{c})=\frac{\sum_{i=1}^n k((c_1 - \mu_{1,i})/b_1)k((c_2 - \mu_{2,i})/b_2)}{n b_1 b_2} .
+  \label{eq:kde}
+\end{equation}
+
+where, $\boldsymbol\mu_t \equiv (\mu_{1,t}, \mu_{2,t})'$, $k$ represents the kernel (often assumed to be Gaussian) and the parameters $b_1$ and $b_2$ are bandwidth parameters that control the diffuseness of the kernel.  As the bandwidth increases, the smoothness of the KDE increases.  Overly smooth estimates will not reveal any patterns in the distribution giving rise to the SPP but estimates that are not smooth enough will be too noisy to provide meaningful inference. Many approaches exist for setting or estimating $b_1$ and $b_2$.  Most commonly, a default bandwidth is calculated for each margin (i.e., latitude and longitude) as $0.9$ times the minimum of the sample standard deviation and the interquartile range divided by $1.34$ times the sample size to the negative one-fifth power.  Of course, many alternative methods exist for setting an appropriate bandwidth (e.g., cross-validation), but the method described above works well for Gaussian kernels and many datasets.  Although the UD is often not estimated in a parametric framework, the estimated density function serves as a basis from which many important space use metrics are calculated. 
+
+Treating the mountain lion telemetry data as an observed SPP, we calculated the KDE:
+
+```{r, fig.height=5}
+library(raster)
+library(MASS)
+source("gray.colors.rev.R")
+mtnlion.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2], 
+                     n = 4 * c(ncol(elevation.rast), 
+                               nrow(elevation.rast)), 
+                     lims = c(min(grid.centers[,1]), 
+                              max(grid.centers[,1]), 
+                              min(grid.centers[,2]), 
+                              max(grid.centers[,2]))
+                     )
+
+image(mtnlion.kde, col = gray.colors.rev(100, start=.2), 
+      cex.axis=1.2, cex.lab=1.5, asp=TRUE)
+points(mtnlion.df[,1:2], pch=19, col=rgb(0,0,0,alpha=.4))
+
+```
+
+The estimated UD in this example indicates that the individual mountain lion likely uses space differentially, with at least two main regions of higher intensity use in the study area.  Furthermore, there appears to be at least one telemetry observation that is distant from the regions of highest intensity use (leftmost point in the figure above), perhaps due to a foray into a neighboring individual's territory.
+
+## References
+
+
