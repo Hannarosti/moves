@@ -3,8 +3,11 @@ title: "UD and HR"
 author: "jmm"
 date: "8/28/2020"
 output:
-  html_document
-fontsize: 12pt
+  html_document:
+    theme: default
+    highlight: tango
+    toc: true
+    toc_float: true
 bibliography: moves.bib
 ---
 
@@ -20,11 +23,13 @@ knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, war
 The basic concept in spatial point processes (SPP) is that the locations associated with an observed SPP are the random quantities of interest. In a 2-D spatial setting, where the size ($n$) of the SPP is known, we can formulate a basic model for an SPP with data represented by location vectors $\mathbf{s}_i$ (containing the coordinates in some geographic space) such that $\mathbf{s}_i \sim f(\mathbf{s})$ for $i=1,\ldots,n$ and with support[^1] $\mathbf{s}_i \in \cal{S}$.  The probability density function (PDF) $f$ stochastically controls the placement of the points $\mathbf{s}_i$, as it would for any other random variable.  In the situation where $n$ is unknown before observing the SPP, the size of the SPP is also random, and thus, part of the overall random process that arises. 
 
 Let's see for example data from a mountain lion *Puma concolor* in Colorado, USA.  
-```{r}
+```{r, fig.height=5}
 library(here)
 load(here("data", "mtnlion_rsf.RData"))
 plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
      xlab = "Easting", ylab = "Northing",
+     ylim = range(grid.centers[,2]), 
+     xlim = range(grid.centers[,1]),
      asp = 1, pch = 19, col = rgb(0,0,0, 0.4), cex = 1.2)
 ```
 
@@ -127,7 +132,7 @@ While home range estimation is not our focus, it can be useful for defining the 
 
 Returning to the mountain lion example in the previous section, let's look at different estimation methods. First, we can use the function `chull` to obtain a convex hull.
 
-```{r}
+```{r, fig.height=5}
 library(raster)
 library(MASS)
 library(here)
@@ -141,14 +146,25 @@ m.chull <- c(m.chull, m.chull[1])
 
 plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
      xlab = "Easting", ylab = "Northing",
+     ylim = range(grid.centers[,2]), 
+     xlim = range(grid.centers[,1]),
      asp = 1, pch = 19, col = rgb(0,0,0, alpha = 0.4), cex = 1.2)
 
 lines(mtnlion.df[m.chull,1:2], lwd=3, col=rgb(0,0,0, alpha = 0.6))
 ```
 
+To get an estimate of the area (in squared km) covered by the convex hull polygon we can do
+```{r}
+library(sp)
+chull.poly <- Polygon(mtnlion.df[m.chull,1:2], hole = F)
+chull.area <- chull.poly@area 
+chull.area/1e+06
+```
+
+
 Now let's look at a KDE at different isoplets densities. Firts we fit the KDE as before
 
-```{r}
+```{r, fig.height=5}
 m.kde <- kde2d(mtnlion.df[,1], mtnlion.df[,2], 
                      n = 4 * c(ncol(elevation.rast), 
                                nrow(elevation.rast)), 
@@ -170,7 +186,7 @@ To get the limits for the desired isoplets, we need to:
 - scale it to max = 1, 
 - find the points that determine the desired isoplet, and plot them
 
-```{r}
+```{r, fig.height=5}
 alpha <- 0.95
 z <- sort(m.kde$z, decreasing = TRUE)
 cz <- cumsum(z)
@@ -188,10 +204,39 @@ plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y,
 lines(iso, lwd = 3, col = rgb(0,0,0, alpha = 0.6))
 ```
 
+To get an estimate of the area covered by the isoplet we can do
+```{r}
+library(sp)
+iso.poly <- Polygon(iso, hole = F)
+iso.area <- iso.poly@area 
+iso.area/1e+06
+```
 
-For example, the KDE isopleth increases in size as the percentage of the isopleth increases.  The 95\% KDE isopleth in Figure~\ref{fig:mtnlion_HR}a is sufficiently small that the dominant region of space in the estimated home range does not include one of the telemetry observations.  In fact, at the 95\% level, there are two distinct regions of space, but we only plot the dominant one (i.e., the one with larger area) for illustration here.  Figure~\ref{fig:mtnlion_HR}d illustrates that, in this case, the convex hull estimate of the mountain lion home range is substantially smaller than the KDE isopleth estimates and captures all of the telemetry data.  The researcher must decide which type of home range estimator to use if inference for the home range is desired.  The convex hull method is less subjective, but some would argue that it is also less realistic.     
+We can compare this 95\% KDE isopleth with a 99% one
+```{r, fig.height=5}
+alpha <- 0.99
+z <- sort(m.kde$z, decreasing = TRUE)
+cz <- cumsum(z)
+cz <- cz/max(cz)
+crit.val <- z[max(which(cz <= alpha))]
+b.full <- contourLines(m.kde, levels = crit.val)
+iso <- cbind(b.full[[1]]$x, b.full[[1]]$y) 
 
+plot(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
+     xlab = "Easting", ylab = "Northing",
+     ylim = range(grid.centers[,2]), 
+     xlim = range(grid.centers[,1]),
+     asp = 1, pch = 19, col = rgb(0,0,0, alpha = 0.4), cex = 1.2)
+
+lines(iso, lwd = 3, col = rgb(0,0,0, alpha = 0.6))
+```
+```{r}
+library(sp)
+iso.poly <- Polygon(iso, hole = F)
+iso.area <- iso.poly@area 
+iso.area/1e+06
+```
+
+We can also see that, in this case, the convex hull estimate of the mountain lion home range is substantially smaller than the KDE isopleth estimates and captures all of the telemetry data. The researcher must decide which type of home range estimator to use if inference for the home range is desired.  The convex hull method is less subjective, but some would argue that it is also less realistic.     
 
 ## References
-
-
