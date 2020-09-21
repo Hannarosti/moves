@@ -1,0 +1,285 @@
+---
+title: "2-RSF"
+author: "jmm"
+date: "9/17/2020"
+output:
+  bookdown::html_document2:
+    number_sections: false
+    theme: default
+    highlight: tango
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+```
+
+# Resource Selection Functions
+
+Studies focused on resource selection differ from those interested in space use in that they seek inference concerning the choices that individuals make (as evidenced by their location) given the type of environment (i.e., resources) that is "available" to them.  This topic involves many different notations and terminologies that we must reconcile as we develop the necessary tools to infer resource selection. The concept of resource selection functions (RSFs) fits within a standard framework for modeling spatial point processes.  Even though much of the notation, terminology, and practice developed separately in the field of quantitative animal ecology, almost all of the tools have existed in the field of statistics for quite some time.  We return to the history of this subject, but we present the fundamental ideas first.  
+
+Resource selection inference can be similar to space use inference in that we often seek to characterize the spatial probability distribution that gives rise to the data.  The difference is that RSF models are parametric and usually involve auxiliary sources of data on the environment or potential *resources* from which the individual can select.  In RSF analysis, the environment, habitat, or resources that are available to the individual are specified or modeled.  **We can think of both the selection process and availability of resources as non-negative functions that influence the spatial density of individual locations in a region**.  The product of selection and availability functions is proportional to the density. If the product of selection and availability functions integrates to one, it is a representation of the true density function.  Thus, to serve as a valid probability model for the individual locations as a point process, the product of selection and availability functions must be normalized so that it is a proper density function over space.    
+
+We describe the RSF model from a somewhat unconventional perspective in wildlife ecology so as to remain consistent with the standard statistical view of a point process model. In doing so, we treat the spatial location $\boldsymbol\mu_i$ as the random quantity of interest for which we specify a PDF. The traditional approach in the wildlife ecological literature treats the environment or resources (i.e., $\mathbf{x}(\boldsymbol\mu_i)$) as the modeled quantity.  Both perspectives are correct in that they are designed to model a point process.  In the recent literature, you will see both formulations.  We treat the spatial location $\boldsymbol\mu_i$ as the point, whereas some other descriptions will treat the set of environmental conditions $\mathbf{x}(\boldsymbol\mu_i)$ as the point.  While both are correct, we choose to model the spatial location directly because it allows us to generalize the model to accommodate more complicated situations.   
+
+Consider the weighted distribution formulation of a point process model for independent individual locations $\boldsymbol\mu_i \sim p(\boldsymbol\mu_i | \boldsymbol\beta, \boldsymbol\theta)$ such that  
+
+\begin{equation}
+  p(\boldsymbol{\mu}_i | \boldsymbol\beta, \boldsymbol\theta) \equiv \frac{g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta) f(\boldsymbol{\mu}_i, \boldsymbol\theta)}{\int g(\mathbf{x}(\boldsymbol\mu),\boldsymbol\beta) f(\boldsymbol\mu,\boldsymbol\theta) d \boldsymbol\mu} \; , 
+  (\#eq:wd)
+\end{equation}
+
+where the selection function $g$ depends on $\boldsymbol\beta$, the selection coefficients. The availability (i.e., $f$) depends on $\boldsymbol\theta$, the availability coefficients.  Furthermore, the denominator is necessary so that the entire PDF $p(\boldsymbol{\mu}_i | \boldsymbol\beta, \boldsymbol\theta)$ integrates to one over the support of the point process.  On first introduction, the resulting expression for the PDF \@ref(eq:wd) can appear unfamiliar and daunting.  The RSF model in \@ref(eq:wd) provides a useful example of how we can construct PDFs from scratch for nearly any type of data or process.    
+
+In principle, any positive functions can be used for availability ($f$) and selection ($g$).  However, in basic resource selection studies, the availability function is taken to be the uniform PDF on the support of the point process (${\cal M}$).  For such uniform availability specifications, the interpretation is that the individual can occur anywhere in the support ${\cal M}$ with equal probability, and thus, the availability coefficients $\boldsymbol\theta$ disappear from the model and the focus shifts toward the selection coefficients $\boldsymbol\beta$.  @Johnson:80 introduced a natural ordering of four scales for resource selection inference that ecologists may be interested in: 
+ 
+1. First-order selection:  The extent of the species distribution. 
+2. Second-order selection:  The home-range of an individual or natural group of individuals. 
+3. Third-order selection:  Sub-home-range features (e.g., habitat types within a home-range).
+4. Fourth-order selection:  Micro-movement and behavior (e.g., acquisition of food, mating, nest building). 
+  
+The concept for scales of selection inference proposed by @Johnson:80 are commonly referred to and allow the researcher to define the support ${\cal M}$ based on their goals for inference.
+
+The selection function $g$ can also assume any positive form, however, two forms are most popular: the exponential and logistic functions.  The exponential selection function can be expressed as $g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta)\equiv \exp(\mathbf{x}'(\boldsymbol\mu_i)\boldsymbol\beta)$ whereas the logistic selection function takes the form of a probability
+
+\begin{equation}
+  g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta) \equiv \frac{\exp(\mathbf{x}'(\boldsymbol\mu_i)\boldsymbol\beta)}{1+\exp(\mathbf{x}'(\boldsymbol\mu_i)\boldsymbol\beta)} \; . 
+   (\#eq:logitlink)
+\end{equation}
+
+The $\mathbf{x}'(\boldsymbol\mu_i)\boldsymbol\beta$ term in \@ref(eq:logitlink) resembles the mean function in linear regression and the forms of selection as link functions commonly used in generalized linear modeling with Poisson and Bernoulli likelihoods. In most GLMs, the value of one is included as the first covariate in $\mathbf{x}$ so that the first element of $\boldsymbol\beta$ (i.e., $\beta_0$) acts as an intercept in the model.  However, if we use an intercept in the exponential selection function, it will cancel in the numerator and denominator of \@ref(eq:wd).  Thus, an intercept is not included in RSF models that rely on \@ref(eq:wd) directly when the selection function is exponential.   
+The main difference in the resulting inference from the two common forms of selection functions is that the logit form (sometimes referred to as a resource selection probability function RSPF, [@LeleKeim:06]), \@ref(eq:logitlink) allows for inference directly on the probability of selection, whereas the exponential form limits inference to the relative intensity of selection.  However, even in this case, inference concerning the direction and magnitude of environmental effects on selection can still be obtained directly by learning about $\boldsymbol\beta$.  Thus, despite this apparent shortcoming, most resource selection studies still rely on the exponential form for the model.  Under uniform availability, the RSF with exponential selection function is 
+
+\begin{equation}
+  p(\boldsymbol{\mu}_i | \boldsymbol\beta) \equiv \frac{\exp(\mathbf{x}'(\boldsymbol{\mu}_i)\boldsymbol\beta)}{\int \exp(\mathbf{x}'(\boldsymbol\mu)\boldsymbol\beta) d \boldsymbol\mu} \; . (\#eq:wdexp)
+\end{equation}
+
+To form a likelihood under the assumption of conditional independence for the points (i.e., $\boldsymbol\mu_i$, for $i=1,\ldots,n$), we take the product of @ref(eq:wdexp) over the $n$ individual locations
+
+\begin{equation}
+  \prod_{i=1}^n \frac{\exp(\mathbf{x}'(\boldsymbol{\mu}_i)\boldsymbol\beta)}{\int \exp(\mathbf{x}'(\boldsymbol\mu)\boldsymbol\beta) d \boldsymbol\mu} \; . 
+  (\#eq:wdexplik)
+\end{equation} 
+
+A maximum likelihood estimate (MLE) for $\boldsymbol\beta$ is obtained by maximizing \@ref(eq:wdexplik) with respect to $\boldsymbol\beta$.  Likewise, in a Bayesian setting, we specify a prior for $\boldsymbol\beta$ and find the posterior distribution $p(\boldsymbol\beta | \boldsymbol\mu_1,\ldots,\boldsymbol\mu_n)$.  In either case, we need to evaluate the integral in the denominator of \@ref(eq:wdexplik) explicitly because it involves $\boldsymbol\beta$.  This integral is typically multivariate (it has the same dimension as the points, $\boldsymbol\mu$).  In most cases, the dimension of $\boldsymbol\mu$ is two, and not analytically tractable.  Thus, unlike most parametric statistical models used in maximum likelihood or Bayesian analyses, we cannot actually evaluate the likelihood directly and a numerical approach is necessary.         
+
+## Implementation of RSF Models
+
+There are at least three main methods for fitting RSF models [@WartonShepherd:10 ; @Aarts:12].  Perhaps the most common implementation of RSF models takes the form of logistic regression.  This is followed closely by Poisson regression and then resource utilization function approaches (which we discuss in the next section). 
+
+We begin by describing the logistic regression approach to fitting RSF models.  The main idea in the logistic regression approach is to convert the individual spatial locations into a binary data set where ones are used to represent the observed locations and zeros represent the available locations.  That is, a background sample is typically taken from the availability distribution $f$ in such a way that it represents a large but finite set of possible locations the individual could have occupied.  The environmental covariates ($\mathbf{x}_i$) at the individual locations ($\boldsymbol\mu_i$) are associated with each of the ones for $i=1,\ldots,n$ and similarly, the covariates are recorded for the background sample of $m-n$ locations.  The response variable is then specified as $\mathbf{y}\equiv(1,\ldots,1,0,\ldots,0)'$ and used in a standard logistic regression with the complete set of covariates.  That is, the model becomes $y_i \sim \text{Bern}(p_i)$ where $\text{logit}(p_i)=\beta_0+\mathbf{x}'_i \boldsymbol\beta$, for $i=1,\ldots,m$ total binary observations.   
+
+Let's do this for the mountain lion data. First, we load the necesary packages, functions, and data. The data includes GPS locations, and raster maps for elevation, exposure, and slope. We also have the coordinates for the centers of the pixels in the raster maps.
+
+```{r}
+library(raster)
+library(MASS)
+library(spatstat)
+library(here)
+
+load(here("data", "mtnlion_rsf.RData"))
+names(mtnlion.df) <- c("x", "y", "time")
+n <- dim(mtnlion.df)[1]
+```
+
+Now we define the sampling area using the 99% isoplet of a KDE
+```{r}
+m.kde <- kde2d(mtnlion.df$x, mtnlion.df$y, 
+                     n = 4 * c(ncol(elevation.rast), 
+                               nrow(elevation.rast)), 
+                     lims = c(min(grid.centers[,1]), 
+                              max(grid.centers[,1]), 
+                              min(grid.centers[,2]), 
+                              max(grid.centers[,2]))
+                     )
+alpha <- 0.99
+z <- sort(m.kde$z, decreasing = TRUE)
+cz <- cumsum(z)
+cz <- cz/max(cz)
+crit.val <- z[max(which(cz <= alpha))]
+b.full <- contourLines(m.kde, levels = crit.val)
+```
+
+We can use the function `owin` from the package `spatstats` to define the observation window for our spatial point process. Then, we subset the observations contained within this window (all the original GPS coordinates in this case), and create a point pattern object `ppp` in `spatstats`:
+
+```{r}
+hr <- owin(poly = list(list(x = rev(b.full[[1]]$x),
+                            y = rev(b.full[[1]]$y))))
+
+pts = inside.owin(mtnlion.df$x, mtnlion.df$y,hr)
+pts = data.frame(x = mtnlion.df$x, y = mtnlion.df$y, inout = pts)
+pts = subset(pts, pts$inout=="TRUE")
+pts.ppp = ppp(x = pts$x, y = pts$y, window = hr)
+```
+
+Now we can use the function `rpoint` from `spatstats` to generate randomly located points within the observation window:
+
+```{r}
+set.seed(101)
+n.bg = 1000
+bg.ppp = rpoint(n.bg, win = hr)
+```
+
+Let's compare the observed and "background" points we just generated:
+
+```{r}
+layout(matrix(1:2,1,2, byrow = TRUE))
+plot(pts.ppp, type = "n", cex=1.2, pch=19, col = rgb(0,0,0, alpha = 0.2),
+     xlab = "", ylab = "", main = "", asp = TRUE)
+points(pts.ppp, pch = 19, col = rgb(0,0,0,alpha = 0.4))
+plot(bg.ppp, type = "n", cex=1.2, pch = 19, col = rgb(0,0,0, alpha = 0.2),
+     xlab = "", ylab = "", main = "", asp = TRUE)
+points(bg.ppp, pch = 19, col = rgb(0,0,0, alpha = 0.4))
+```
+
+This randomly generated background sample represents what is "available" for this animal within its home range. We will use it to estimate RSF using the logistic regression approach. As covariates, we will consider elevation, slope, and exposure. Let's extract the values for these covariates from the corresponding raster maps and scale the values of the environmental covariates (why we do this?):
+
+```{r, fig.height=3.5, fig.width=6}
+grid.hr.TF <- inside.owin(grid.centers[,1], grid.centers[,2], hr)
+elev.NA.rast <- elevation.rast
+slope.NA.rast <- slope.rast
+exposure.NA.rast <- exposure.rast
+
+values(elev.NA.rast)[!grid.hr.TF] <- NA
+values(slope.NA.rast)[!grid.hr.TF] <- NA
+values(exposure.NA.rast)[!grid.hr.TF] <- NA
+values(elev.NA.rast)[grid.hr.TF] <- scale(values(elev.NA.rast)[grid.hr.TF])
+values(slope.NA.rast)[grid.hr.TF] <- scale(values(slope.NA.rast)[grid.hr.TF])
+values(exposure.NA.rast)[grid.hr.TF] <- scale(values(exposure.NA.rast)[grid.hr.TF])
+
+layout(matrix(1:3,1,3))
+plot(1,1, type = "n", cex.main=1.5, axes = FALSE,
+     xlim = pts.ppp$window$xrange,
+     ylim = pts.ppp$window$yrange,
+     xlab = "", ylab = "", asp = TRUE, main = "elevation")
+image(elev.NA.rast, add = TRUE)
+plot(1,1, type = "n", cex.main=1.5, axes = FALSE,
+     xlim = pts.ppp$window$xrange,
+     ylim = pts.ppp$window$yrange,
+     xlab = "", ylab = "", asp = TRUE, main = "slope")
+image(slope.NA.rast, add = TRUE)
+plot(1,1, type = "n", cex.main=1.5, axes = FALSE,
+     xlim = pts.ppp$window$xrange,
+     ylim = pts.ppp$window$yrange,
+     xlab = "", ylab = "", asp = TRUE, main = "exposure")
+image(exposure.NA.rast, add = TRUE)
+
+```
+
+For the logistic regression we need a vector of ones and zeroes representing "used" *versus* "available" points. This will be our response variable. For the covariates, we need the environmental values associated with each location, both used and available:
+```{r}
+bg.cells <- cellFromXY(elev.NA.rast, cbind(bg.ppp$x, bg.ppp$y))
+mtnlion.cells <- cellFromXY(elev.NA.rast, mtnlion.df[,1:2])
+y.binary <- rep(0, n + n.bg)
+elev.binary <- rep(0, n + n.bg)
+slope.binary <- rep(0, n + n.bg)
+exposure.binary <- rep(0, n + n.bg)
+y.binary[1:n] = 1
+elev.binary[1:n] = values(elev.NA.rast)[mtnlion.cells]
+slope.binary[1:n] = values(slope.NA.rast)[mtnlion.cells]
+exposure.binary[1:n] = values(exposure.NA.rast)[mtnlion.cells]
+elev.binary[-(1:n)] = values(elev.NA.rast)[bg.cells]
+slope.binary[-(1:n)] = values(slope.NA.rast)[bg.cells]
+exposure.binary[-(1:n)] = values(exposure.NA.rast)[bg.cells]
+```
+
+Now we can do the logistic regression:
+
+```{r}
+rsf.1.df <- data.frame(y = y.binary, elev = elev.binary, 
+                       slope = slope.binary, 
+                       exposure = exposure.binary)
+logistic.reg <- glm(y ~ elev + slope + exposure,
+            family = binomial(link = "logit"),
+            data = rsf.1.df)
+
+kable(summary(logistic.reg)$coefficients)
+```
+
+
+For the Poisson regression, we need to count the number of locations inside each grid cell. The following lines of code do that:
+
+```{r}
+grid.hr.TF <- inside.owin(grid.centers[,1], grid.centers[,2], hr)
+elev.NA.rast <- elevation.rast
+values(elev.NA.rast)[!grid.hr.TF] <- NA
+
+mtnlion.count.rast <- elev.NA.rast
+values(mtnlion.count.rast)[grid.hr.TF] <- 0
+mtnlion.cells <- cellFromXY(elev.NA.rast, mtnlion.df[,1:2])
+mtnlion.table <- table(mtnlion.cells)
+mtnlion.cell.idx <- as.numeric(attr(table(mtnlion.cells), "dimnames")$mtnlion.cells)
+values(mtnlion.count.rast)[mtnlion.cell.idx] <- mtnlion.table
+
+op <- par(bty = "n")
+plot(mtnlion.count.rast, axes = FALSE)
+```
+
+In the Poisson regression approach to fitting RSF models, the support of the individual locations ${\cal M}$ is gridded up into $L$ areal units (i.e., grid cells or pixels).  The covariates ($\mathbf{x}_l$ for $l=1,\ldots,L$) are associated with each grid cell and the individual locations ($\boldsymbol\mu$) are counted in each grid cell and recorded in an $L\times 1$ vector of cell frequencies $\mathbf{z}$.  The model becomes $z_l \sim \text{Pois}(\lambda_l)$ where $\log{\lambda_l}=\beta_0+\mathbf{x}'_l \boldsymbol\beta$ for all grid cell counts $l=1,\ldots,L$.  The intercept $\beta_0$ is ignored and the estimates of $\boldsymbol\beta$ are used for resource selection inference.   
+  
+
+```{r}
+grid.hr.TF <- inside.owin(grid.centers[,1], grid.centers[,2], hr)
+elev.NA.rast <- elevation.rast
+slope.NA.rast <- slope.rast
+exposure.NA.rast <- exposure.rast
+
+values(elev.NA.rast)[!grid.hr.TF] <- NA
+values(slope.NA.rast)[!grid.hr.TF] <- NA
+values(exposure.NA.rast)[!grid.hr.TF] <- NA
+values(elev.NA.rast)[grid.hr.TF] <- scale(values(elev.NA.rast)[grid.hr.TF])
+values(slope.NA.rast)[grid.hr.TF] <- scale(values(slope.NA.rast)[grid.hr.TF])
+values(exposure.NA.rast)[grid.hr.TF] <- scale(values(exposure.NA.rast)[grid.hr.TF])
+
+rsf.2.df <- data.frame(y = values(mtnlion.count.rast), 
+                      elev = values(elev.NA.rast), 
+                      slope = values(slope.NA.rast), 
+                      exposure = values(exposure.NA.rast))
+
+poisson.reg <- glm(y ~ elev + slope + exposure,
+            family = poisson(link = "log"),
+            data = rsf.2.df)
+
+kable(summary(poisson.reg)$coefficients)
+```
+
+
+The striking result is that both the logistic and Poisson regression approaches to implementing the RSF model yield the same inference about $\boldsymbol\beta$ under certain conditions [@WartonShepherd:10; @Aarts:12].  In the mountain lion example, we fit the spatial point process model using both Poisson and logistic regression to yield inference for the selection coefficients $\boldsymbol\beta$ based on the standardized environmental covariates.   
+
+The results indicate that both the logistic and Poisson regression approach to fitting the point process model are very similar:
+
+```{r, echo=FALSE}
+res <- cbind(summary(logistic.reg)$coefficients[2:4,c(1,4)], 
+            summary(poisson.reg)$coefficients[2:4,c(1,4)])
+dimnames(res)[[2]][1] = "Logistic"
+dimnames(res)[[2]][3] = "Poisson"
+dimnames(res)[[2]][c(2,4)] = "p-value"
+kable(res)
+```
+
+
+\begin{table}[htp]
+\centering
+\caption{Estimated resource selection coefficients using logistic (LR) and Poisson regression (PR) based on the covariates in Figure~\ref{fig:mtnlion_covs}.}
+\begin{tabular}{l c c c c }
+  \\  \hline
+  & \multicolumn{2}{c}{LR} & \multicolumn{2}{c}{PR}\\  
+  & estimate & p-value & estimate & p-value \\ \hline
+  (a) elevation & $-0.311$ & $0.008$ & $-0.295$ & $0.008$  \\ \hline
+  (b) slope & $0.244$ & $0.033$ & $0.215$ & $0.035$ \\ \hline
+  (c) exposure & $-0.139$ & $0.265$ & $-0.131$ & $0.286$ \\ \hline
+\end{tabular}
+\label{tab:mtnlion_rsf}
+\end{table}  
+Furthermore, resource selection inference resulting from the model fits indicates that this mountain lion is selecting for lower elevations and steeper slopes relative to available terrain; there is no evidence of selection for exposure given the other covariates in the model.    
+
+The necessary conditions for equivalence in the inference are that the background sample used in the logistic regression and the number of grid cells used in the Poisson regression often need to be very large; sometimes on the order of tens of thousands [@Northrup:13].  The reason that a large background sample or number of grid cells is so important is that it is implicitly computing the integral in the denominator of the RSF model \@ref(eq:wdexp) for us. Perhaps the most common mistake made in most classical RSF implementations is that a large enough background sample is not used.  The easiest way to check whether a large enough sample is chosen is to try larger background sample sizes until the inference stabilizes.    
+
+
+## References
