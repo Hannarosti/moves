@@ -1,0 +1,19 @@
+An alternative availability model where the availability range is estimated simultaneously with the other parameters was proposed by @Christ:08 and generalized to uneven times of location by @Johnson:08a is, 
+
+\begin{equation}
+  f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, \boldsymbol\theta) \propto \exp(-(\boldsymbol\mu_i - \tilde{\boldsymbol\mu}_i)'\mathbf{Q}_i^{-1}(\boldsymbol\mu_i - \tilde{\boldsymbol\mu}_i)/2) \; ,
+\end{equation}
+
+such that $\tilde{\boldsymbol\mu}_i = \bar{\boldsymbol\mu} + \mathbf{B}_i (\boldsymbol\mu_{i-1} - \bar{\boldsymbol\mu})$ and $\bar{\boldsymbol\mu}$ is a central place of attraction. The components controlling the dispersion of the availability distribution are $\mathbf{B}_i\equiv\exp(-(t_i - t_{i-1})/\phi)\mathbf{I}$, where $\mathbf{Q}_i=\mathbf{Q}-\mathbf{B}_i\mathbf{Q}\mathbf{B}_i$.  @Johnson:08a arrived at this specific form for availability because they were assuming a stochastic process for animal movement called the Ornstein-Uhlenbeck (OU) model (e.g., @DunnGipson:77; @Blackwell:97).  The parameter $\phi$ controls the range of availability as the $r$ parameters does in the "step-selection" models. However, in the OU model, the availability limit is soft, meaning the availability function never drops all the way to zero for any distance from the current location, but the function decreases and approaches zero for very large distances. The early step selection models had a hard limit (i.e., there is no availability of locations for distances larger than $r$).  Additionally, the OU based model allows for a central attraction point (or multiple attraction points [@Johnson:08a].  Similar to @Johnson:08a, @MoorcroftBarnett:08 also described a unification of resource selection models and what they call "mechanistic home range" models.  The mechanistic home range models essentially model the movement process in terms of partial differential equations [@Moorcroft:06].  @MoorcroftBarnett:08 also point out that the model in  \@ref(eq:wdst) rigorously accommodates autocorrelation if it exists.        
+
+@Potts:14a discussed the same framework presented by @Johnson:08a, but referred to \@ref(eq:wdst) as the "master equation." @Potts:14a parameterized the time-varying availability function $f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, \theta)$ in terms of bearing $\theta$ so that $\boldsymbol{\mu}_i$ and $\boldsymbol{\mu}_{i-1}$ are related by   
+
+\begin{equation}
+  \boldsymbol{\mu}_i = \boldsymbol{\mu}_{i-1} + 
+  \begin{pmatrix}
+    \cos (\theta + \pi)\sqrt{(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})'(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})} \\
+    \sin (\theta + \pi)\sqrt{(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})'(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})} \\
+  \end{pmatrix}
+\end{equation}
+
+where $\sqrt{(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})'(\boldsymbol{\mu}_i-\boldsymbol{\mu}_{i-1})}$ is the Euclidean distance between $\boldsymbol{\mu}_i$ and $\boldsymbol{\mu}_{i-1}$.  Additionally, @Potts:14a were interested in discrete habitat types, and thus, they modified the traditional resource selection function $g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta)$ to be the proportion line segment from $\boldsymbol{\mu}_{i-1}$ to $\boldsymbol{\mu}_i$ of habitat $\mathbf{x}$, for example.  @Potts:14a ultimately decomposed the availability function into a finite sum of habitat specific components.  The habitat specific components involved a product of turning angle and step length distributions (e.g., Weibull and von Mises distributions).  Rather than maximize the likelihood based on \@ref(eq:wdst) directly, @Potts:14a used an approximate conditional logistic regression procedure.  
