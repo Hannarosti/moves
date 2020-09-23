@@ -1,0 +1,48 @@
+
+We need a formal way to compare SPPs (i.e., summary statistic) that has an intuitive interpretation and can be easily computed for both the real data and the numerous simulated data sets.  
+
+The Ripley's K-statistic describes the degree of clustering or regularity in a point process.  The K-statistic is often specified as an expectation: 
+$$
+  K(d) = \lambda^{-1} \text{E}(\text{# of points within $d$ of any point})
+$$
+
+where, $d$ represents the distance for which we desire inference (e.g., is the process clustered or regular within distance $d$?).  The K-statistic can be affected by edges of the spatial domain when points are close to it, thus an edge-corrected estimator for the K-statistic was proposed by \cite{Ripley:76}:
+
+$$   
+  \hat{K}(d) = \hat{\lambda}^{-1} \sum_{i\neq j} w(\mathbf{s}_i,\mathbf{s}_j)^{-1} 1_{\{d_{i,j}\leq d\} }/n  \;,
+$$   
+
+where, $d_{i,j}$ is distance between point $i$ and point $j$, $\hat{\lambda}=n/\text{area}({\cal S})$, and $w(\mathbf{s}_i,\mathbf{s}_j)$ is the proportion of the circumference of a circle, centered at $\mathbf{s}_i$, that is inside the study region ${\cal S}$.    
+
+The use of simulated data for hypothesis testing of SPP characteristics is more tractable than deriving theoretical properties of the K-statistic.  However, because we are in a simulation setting, we need to employ a Monte Carlo based test.  The procedure is simple.  Begin by simulating a large number, N, of CSR SPPs, then compute \ref{eq:khat} for each one and for the observed data $\mathbf{S}$ as well (i.e., $\hat{K}(d)_{\text{obs}}$).  Rank all of these estimated K statistics together for a given distance of interest $d$.  Reject the null hypothesis of "no clustering" at the $\alpha$ level if $1-(\text{rank}(\hat{K}(d)_{\text{obs}})/N) < \alpha$ (conversely, $\text{rank}(\hat{K}(d)_{\text{obs}})/N < \alpha$ for the null hypothesis "no regularity").    
+
+Even plotting clustering statistics for several values of $d$ simultaneously can be helpful in the examination of SPP patterns descriptively.  For graphical purposes, it is often easier to assess patterns with a slightly modified version of K-function\footnote{We use the term "function" here because $K(d)$ and $L(d)$ are considered for a range of values of $d$.} called the L-function which is estimated as: 
+$$
+  \hat{L}(d)=\sqrt{\hat{K}(d)/\pi}-d
+$$
+
+Significantly positive values of $\hat{L}(d)$ indicate clustering at distance $d$, whereas significantly negative values indicate regularity.   
+
+For example, we compared the mountain lion data shown above with a simulated CSR SPP with the same number of observations ($n=110$) in Figure~\ref{fig:L_func} over a range of distances $d$.
+
+```{r}
+library(spatstat)
+
+mtnlion.pp <- ppp(mtnlion.df$UTM_X, mtnlion.df$UTM_Y, 
+                  range(mtnlion.df$UTM_X), range(mtnlion.df$UTM_Y))
+plot(Lest(mtnlion.pp))
+sim1 <- ppp(x1, y1, c(0,1), c(0,1))
+plot(Kest(sim1))
+```
+
+
+\begin{figure}[htp]
+  \centering
+  \includegraphics[width=5.5in, angle=0]{figs/chap2/L_func.pdf}
+  \caption{Simulated CSR SPP (a) and scaled bobcat telemetry SPP (c).  Associated $\hat{L}(d)$ functions appear in the right panels (b: CSR and d: bobcat).  Gray regions in panels (b) and (d) represent 95\% simulation intervals based on Monte Carlo simulation from 1000 CSR processes in the same spatial domain.}
+  \label{fig:L_func}
+\end{figure}
+
+Notice that the we have rescaled the bobcat telemetry data (Figure~\ref{fig:L_func}c) so that they fit within the same bounding box as the CSR process (Figure~\ref{fig:L_func}a).  While the CSR process stays largely within the simulation interval (region shown in gray), the bobcat telemetry SPP shows evidence of clustering beyond a distance of approximately 0.03 (in the scaled domain).  
+
+
