@@ -161,7 +161,6 @@ chull.area <- chull.poly@area
 chull.area/1e+06
 ```
 
-
 Now let's look at a KDE at different isoplets densities. Firts we fit the KDE as before
 
 ```{r, fig.height=5}
