@@ -1,0 +1,83 @@
+---
+title: "3-SSF"
+author: "jmm"
+date: "9/21/2020"
+output:
+  bookdown::html_document2:
+    number_sections: false
+    theme: default
+    highlight: tango
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+```
+
+# Spatio-Temporal Models 
+
+## Autocorrelation
+
+Obtaining inference for resource selection using animal telemetry data can be tricky [@beyer2010]. As we record the location of animals at smaller time intervals, we need to consider temporal autocorrelation. The fundamental issue with temporal autocorrelation is that the point process models used to obtain RSF inference often assume that each point (i.e., observed animal position) arises independently of the others.  When the telemetry fixes are obtained close together in time, the points will naturally be closer together due to the physics involved in movement (e.g., animals have limited speed when moving).  If short time gaps between telemetry fixes creates a form of dependence in the observations that cannot be accounted for by the standard RSF model, then the model assumptions will not be valid and we cannot rely on the resulting statistical inference. 
+
+For these reasons, @SwihartSlade:85 developed a method for assessing temporal dependence in telemetry data.  A function of distance moved and distance from activity center serves as the basis for assessing dependence.  For a given time lag $l$, @SwihartSlade:85 rely on the statistic  
+
+\begin{equation}
+  \frac{\sum_{i=l+1}^n (\mu_{1,i}-\mu_{1,i-l})^2 + (\mu_{2,i}-\mu_{2,i-l})^2}{\sum_{i=1}^n (\mu_{1,i}-\bar{\mu}_{1})^2 + (\mu_{2,i}-\bar{\mu}_2)^2} \cdot \frac{n}{n-l}\; , 
+  (\#eq:swihartstat)
+\end{equation}
+
+assuming that the positions $\boldsymbol\mu_i \equiv (\mu_{1,i}, \mu_{2,i})'$ for $i=1,\ldots,n$ are observed directly without measurement error. Thus, the autocorrelation statistic \@ref(eq:swihartstat) is essentially a multivariate Durbin-Watson statistic that accounts for the home range.  By calculating \@ref(eq:swihartstat) for a set of time lags ranging from small to large, one could look for a temporal lag at which the autocorrelation levels off.  This leveling off suggests a time lag beyond which pairs of telemetry observations can be considered independent.  For large enough data sets, the original set of telemetry observations could be thinned such that no two points occur within the determined time lag and the usual RSF model then can be fit to the subsampled data set.   
+
+The paper by @SwihartSlade:85 is an important contribution to the animal movement literature because it remind us to check the assumptions of our models. The downside is that we leave out data if we are interested in using standard approaches for analyzing telemetry data. A similar dilemma occurred early in the development of spatial statistics. Before modern methods for model-based geostatistics existed, researchers finding evidence for residual spatial autocorrelation would resort to subsampling data at spatial lags beyond which the errors were considered to be independent.  
+
+@Fieberg:10 provide an excellent overview of different approaches for dealing with autocorrelation in resource selection inference, ranging from the subsampling approach we just described to hybrid models containing both movement and selection components.  Newer sources of telemetry data collected at fine temporal resolutions present both a challenge and opportunity for new modeling and inference pertaining to animal movement. 
+
+
+## Spatio-Temporal Point Process Models
+
+Returning to the point process model for temporally independent telemetry data,
+
+\begin{equation}
+  p(\boldsymbol{\mu}_i | \boldsymbol\beta, \boldsymbol\theta) \equiv \frac{g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta) f(\boldsymbol{\mu}_i, \boldsymbol\theta)}{\int g(\mathbf{x}(\boldsymbol\mu),\boldsymbol\beta) f(\boldsymbol\mu,\boldsymbol\theta) d \boldsymbol\mu} \; , 
+  (\#eq:wd)
+\end{equation}
+
+we can think of ways to generalize it for situations where the time steps between telemetry observations are small. In this case, there is some reasonable finite upper bound to the distance an animal can travel in a fixed amount of time.  Heuristically, such constraints are what provide smoothness to the individual's movement path.  Conditioning on the position at the previous time step ($\boldsymbol\mu_{i-1}$), we can imagine a spatial map corresponding to the probability for the location of the animal at the next time in the absence of other environmental information.  For example, the maps in Figure~\ref{fig:avail_plot} indicate that locations near the previous position ($\boldsymbol\mu_{i-1}$) would be more likely to host the next position ($\boldsymbol\mu_{i}$).
+
+![Examples of two different availability functions $f(\boldsymbol{\mu}_i, \boldsymbol\theta))$ (shaded surface with darker corresponding to greater availability).  a.) less diffuse availability and b.) more diffuse availability.  Two consecutive positions (i.e., $\boldsymbol{\mu}_{i-1}$ and $\boldsymbol{\mu}_i$) are shown for reference.](./figs/avail_plot.png)
+
+As the distance increases from the previous position, we would be less likely to find the next position. The position labeled $\boldsymbol\mu_{i}$ in  the figure above is more likely under the availability in panel **b** than panel **a**.  Furthermore, as the time between positions ($\Delta_i$) increases, we would expect the map to be flatter, indicating the animal could be farther away. With increasing $\Delta_i$, we would expect a completely flat surface over the support of the point process (${\cal M}$) such that the effective distribution for that particular position ($\boldsymbol\mu_{i}$) is uniform (or "Complete Spatial Random", using the jargon from the point process literature).  The surface we are describing corresponds to the availability surface ($f(\boldsymbol{\mu}_i, \boldsymbol\theta)$) for each particular time $t_i$ and will change over time depending on $\boldsymbol\mu_{i-1}$ and $\Delta_i$.  @MoorcroftBarnett:08 refer to this time-varying availability distribution as a "redistribution kernel." 
+
+To translate the concept of time-varying availability into the point process model itself, we need to allow for dependence in the availability distribution such that
+
+\begin{equation}
+  p(\boldsymbol{\mu}_i | \boldsymbol\mu_{i-1}, \boldsymbol\beta, \boldsymbol\theta) \equiv \frac{g(\mathbf{x}(\boldsymbol{\mu}_i),\boldsymbol\beta) f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, \Delta_i, \boldsymbol\theta)}{\int g(\mathbf{x}(\boldsymbol\mu),\boldsymbol\beta) f(\boldsymbol\mu | \boldsymbol{\mu}_{i-1}, \Delta_i, \boldsymbol\theta) d \boldsymbol\mu} \; . 
+   (\#eq:wdst)
+\end{equation}
+
+The new model in \@ref(eq:wdst) has the same basic form as the original point process model in \@ref(eq:wd), but contains an explicit dependence in time through the availability function $f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, \Delta_i, \boldsymbol\theta)$. @Christ:08 and @Johnson:08a presented this spatio-temporal point process model as part of a general framework for accounting for both animal movement and resource selection simultaneously.    
+
+## Step Selection Functions
+
+The vast majority of STPP models for animal telemetry data have been developed using the conditional (weighted distribution) approach as an extension to the temporally static resource selection models.  Thus, we begin by investigating weighted distribution specifications.  The early developments of this style of spatio-temporal point process model were presented by @Arthur:96 and later generalized by @Rhodes:05.  @Arthur:96 presented the basic idea that availability could change as a function of the individual's position and time.  They suggested the use of a circular availability function 
+
+\begin{equation}
+  f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, r)=
+  \begin{cases}     
+    \frac{1}{\pi r^2} &\mbox{if } ||\boldsymbol\mu_i - \boldsymbol\mu_{i-1}|| \leq r \\
+    0 &\mbox{if } ||\boldsymbol\mu_i - \boldsymbol\mu_{i-1}|| > r  
+  \end{cases} \; ,    
+\end{equation}
+
+where $||\boldsymbol\mu_i - \boldsymbol\mu_{i-1}||$ is the Euclidean distance between the two positions ($\boldsymbol\mu_i$ and $\boldsymbol\mu_{i-1}$) and $r$ is the radius of the circular availability area.  This early work led to a suite of similar methods known as "step selection functions" [@Boyce:03; @Fortin:05; @Potts:14a].  **The classical step selection function approach defines the availability circle using the empirical step lengths associated with the telemetry data**.  A background sample of availability locations are selected within the associated circle for each telemetry observation.  Then a conditional logistic regression approach is used to associate the covariates at the background sample locations with each telemetry location.  Similar methods were developed for use in medical statistics to account for variation in patients that have similar backgrounds to control for potentially confounding factors in life history.
+
+
+
+# References
