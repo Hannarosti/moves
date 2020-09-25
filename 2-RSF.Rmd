@@ -4,12 +4,14 @@ author: "jmm"
 date: "9/17/2020"
 output:
   bookdown::html_document2:
+    css: style.css
     number_sections: false
     theme: default
-    highlight: tango
+    highlight: haddock
     toc: true
     toc_float: true
 bibliography: moves.bib
+csl: ecology.csl
 ---
 
 ```{r, echo=FALSE}
@@ -17,7 +19,7 @@ library(knitr)
 library(bookdown)
 options(figure_counter = FALSE, digits = 2)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
 ```
 
 # Resource Selection Functions
@@ -26,7 +28,7 @@ Studies focused on resource selection differ from those interested in space use 
 
 Resource selection inference can be similar to space use inference in that we often seek to characterize the spatial probability distribution that gives rise to the data. The difference is that RSF models are parametric and usually involve auxiliary sources of data on the environment or potential *resources* from which the individual can select. In RSF analysis, the environment, habitat, or resources that are available to the individual are specified or modeled. **We can think of both the selection process and availability of resources as non-negative functions that influence the spatial density of individual locations in a region**.  The product of selection and availability functions is proportional to the density. If the product of selection and availability functions integrates to one, it is a representation of the true density function.  Thus, to serve as a valid probability model for the individual locations as a point process, the product of selection and availability functions must be normalized so that it is a proper density function over space.    
 
-We describe the RSF model from a somewhat unconventional perspective in wildlife ecology so as to remain consistent with the standard statistical view of a point process model. In doing so, we treat the spatial location $\boldsymbol\mu_i$ as the random quantity of interest for which we specify a probability density function. The traditional approach in the wildlife ecological literature treats the environment or resources (i.e., $\mathbf{x}(\boldsymbol\mu_i)$) as the modeled quantity. Both perspectives are correct in that they are designed to model a point process. In the recent literature, you will see both formulations.  We treat the spatial location $\boldsymbol\mu_i$ as the point, whereas some other descriptions will treat the set of environmental conditions $\mathbf{x}(\boldsymbol\mu_i)$ as the point. While both are correct, we choose to model the spatial location directly because it allows us to generalize the model to accommodate more complicated situations.   
+We describe the RSF model from a somewhat unconventional perspective in wildlife ecology so as to remain consistent with the standard statistical view of a point process model. In doing so, we treat the spatial location $\boldsymbol\mu_i$ as the random quantity of interest for which we specify a probability density function (PDF). The traditional approach in the wildlife ecological literature treats the environment or resources (i.e., $\mathbf{x}(\boldsymbol\mu_i)$) as the modeled quantity. Both perspectives are correct in that they are designed to model a point process. In the recent literature, you will see both formulations.  We treat the spatial location $\boldsymbol\mu_i$ as the point, whereas some other descriptions will treat the set of environmental conditions $\mathbf{x}(\boldsymbol\mu_i)$ as the point. While both are correct, we choose to model the spatial location directly because it allows us to generalize the model to accommodate more complicated situations.   
 
 Consider the weighted distribution formulation of a point process model for independent individual locations $\boldsymbol\mu_i \sim p(\boldsymbol\mu_i | \boldsymbol\beta, \boldsymbol\theta)$ such that  
 

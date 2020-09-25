@@ -3,19 +3,23 @@ title: "UD and HR"
 author: "jmm"
 date: "8/28/2020"
 output:
-  html_document:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
     theme: default
-    highlight: tango
+    highlight: haddock
     toc: true
     toc_float: true
 bibliography: moves.bib
+csl: ecology.csl
 ---
 
 ```{r, echo=FALSE}
 library(knitr)
-options(figure_counter = FALSE)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
 ```
 
 ## Points in Space

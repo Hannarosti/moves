@@ -4,12 +4,14 @@ author: "jmm"
 date: "9/21/2020"
 output:
   bookdown::html_document2:
+    css: style.css
     number_sections: false
     theme: default
-    highlight: tango
+    highlight: haddock
     toc: true
     toc_float: true
 bibliography: moves.bib
+csl: ecology.csl
 ---
 
 ```{r, echo=FALSE}
@@ -17,7 +19,7 @@ library(knitr)
 library(bookdown)
 options(figure_counter = FALSE, digits = 2)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
 ```
 
 # Spatio-Temporal Models 
@@ -78,6 +80,7 @@ The vast majority of STPP models for animal telemetry data have been developed u
 
 where $||\boldsymbol\mu_i - \boldsymbol\mu_{i-1}||$ is the Euclidean distance between the two positions ($\boldsymbol\mu_i$ and $\boldsymbol\mu_{i-1}$) and $r$ is the radius of the circular availability area.  This early work led to a suite of similar methods known as "step selection functions" [@Boyce:03; @Fortin:05; @Potts:14a].  **The classical step selection function approach defines the availability circle using the empirical step lengths associated with the telemetry data**.  A background sample of availability locations are selected within the associated circle for each telemetry observation.  Then a conditional logistic regression approach is used to associate the covariates at the background sample locations with each telemetry location.  Similar methods were developed for use in medical statistics to account for variation in patients that have similar backgrounds to control for potentially confounding factors in life history.
 
+Before seeing some examples and tools for step selection functions let's see some basic stuff about random walks in the next section...
 
 
 # References
