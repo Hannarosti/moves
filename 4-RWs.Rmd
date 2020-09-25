@@ -1,0 +1,288 @@
+---
+title: "Random Walks"
+author: "jmm"
+date: "9/23/2020"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+```
+
+Obtaining resource selection inference using the point process models described before is often straightforward when the temporal component of the process is unimportant or ignored.  However, point process models become increasingly sophisticated when the temporal component is added explicitly. If the physical process of movement itself is of interest, it may be useful to take a different modeling perspective. An alternative to the point process perspective considers the data and underlying process in the time domain directly, allowing for explicit forms of temporal dependence. If the process is considered in discrete time, we are firmly in the realm of time series statistics. We begin our discussion of continuous-space discrete-time movement models by introducing the random walk and then make a sequence of extensions that provide additional insight about the dynamics and behavior of moving animals.  
+
+For now, assume there is no (or very little) measurement error associated with our telemetry data so that we can model the true individual locations $\boldsymbol\mu_t$ directly. Next, assume that an appropriate time scale is known in advance.  That is, the temporal "grain" of our model can be thought of as $\Delta_t$, the length of time between two successive animal locations. For now, if we assume that $\Delta_t$ is constant through time, we can drop the $\Delta_t$ from the notation for the nearest time ahead $\boldsymbol\mu_{t+\Delta_t}$ and behind $\boldsymbol\mu_{t-\Delta_t}$ so that we have $\boldsymbol\mu_{t+1}$ and $\boldsymbol\mu_{t-1}$, without any loss in generality.
+
+The key to setting up a random walk is to recall Markovian dynamics. In the simplest case, we assume the location at time $t$ is dependent on all of the other locations but only through its nearest neighbors in time. That is, if the random walk is of order 1 (e.g., an AR(1) time series model), we can write
+
+\begin{equation} 
+  \boldsymbol\mu_t = \boldsymbol\mu_{t-1} + \boldsymbol\varepsilon_t \; ,
+  (\#eq:var1)
+\end{equation} 
+
+for $t=1,\ldots,T$, where the "noise" or "error" is often assumed to be independent and normally distributed such that $\boldsymbol\varepsilon_t \sim \text{N}(\mathbf{0},\boldsymbol\Sigma)$. In the simplest case, the error covariance matrix could be specified as: $\boldsymbol\Sigma\equiv\sigma^2\mathbf{I}$ so that the errors are symmetric. In time series statistics, this model is often referred to as a vector autoregressive model (i.e., VAR(1); because $\boldsymbol\mu_t$ is multidimensional) of order one. An alternative way to write the random walk model is using distribution notation such that $\boldsymbol\mu_t \sim \text{N}(\boldsymbol\mu_{t-1}, \sigma^2\mathbf{I})$.       
+
+Let's run some simulations to see how this model behaves. First we start with a single realization of $1000$ time steps
+
+```{r}
+library(MASS)
+set.seed(1234)
+T <- 1000
+rho <- 1
+M <- rho * diag(2)
+s2 <- 0.5
+MU <- matrix(0, T, 2)
+S <- M * (s2)
+
+for(t in 2:T){
+  MU[t, ] <- MU[t-1, ] + mvrnorm(1, mu = c(0, 0), S)
+}
+
+plot(MU, type = "l", asp = 1, xlab = "", ylab = "", 
+     cex.lab = 1.2 , font.lab = 2, cex.axis = 1, 
+     bty = "n", las = 1) 
+
+```
+
+In terms of mechanisms, the VAR(1) model implies that the displacement of the individual during each time step occurs in a random direction with step length governed by a univariate Weibull distribution with shape = $2$ and scale = $\sqrt{2  \sigma^2}$ . In this case, the variance component $\sigma^2$ controls the step lengths between successive locations. 
+
+Let's check that out with simulations. The "steps" are the distances between successive locations. To calculate them from the matrix of spatial coordinates we can do
+
+```{r}
+MU.diff <- apply(MU, 2, diff)
+MU.sl <- sqrt(apply(MU.diff^2, 1, sum))
+```
+
+and check that the distribution of steps follows a Weibull with shape = $2$ and scale = $\sqrt{2  \sigma^2}$
+
+```{r}
+hist(MU.sl, prob = TRUE, col=8, breaks=60, 
+     xlab = "step length", main = "",
+     cex.axis = 1.2, cex.lab = 1.5, cex.main = 1.5)
+curve(dweibull(x, 2, sqrt(2*s2)), add = TRUE, lwd=3, from = 0, to = max(MU.sl))
+```
+
+Many times random walks are defined based on the distribution of turning angles. Turning angles are the angular difference between two consecutive step directions(to calculate one turning angle we need $3$ spatial coordinates). To calculate turning angles we can do:
+
+```{r}
+turns <- numeric(nrow(MU.diff) - 1)
+
+for(i in 2: nrow(MU.diff)){
+  v <- MU[i, ] - MU[i - 1, ]
+  w <- MU[i + 1, ] - MU[i, ]
+  angle <- atan2(w[2], w[1]) - atan2(v[2], v[1])
+  while (angle <= (-pi)) angle <- angle + 2 * pi
+  while (angle > pi) angle <- angle - 2 * pi
+  turns[i] <- angle
+}
+```
+
+and to plot them in a cirular histogram:
+```{r}
+library(CircStats)
+rose.diag(turns, 30, prop = 3.5)
+```
+
+To get an indea of the expected behavior of this model, we can simulate several trajectories and see how location changes with time
+
+```{r, cache=TRUE, fig.width=12, fig.height=6}
+set.seed(1234)
+T <- 200
+rho <- 1
+M <- rho * diag(2)
+s2 <- 0.5
+MU <- matrix(0, T, 2)
+S <- M * (s2)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+for(t in 2:T){
+  MU[t, ] <- MU[t-1, ] + mvrnorm(1, mu = c(0, 0), S)
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+
+df <- data.frame(x = X[20,], y = Y[20,])
+p1 <- ggplot(df, aes(x, y))  + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal() + ggtitle("T = 20")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p2 <- ggplot(df, aes(x, y)) + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal() + ggtitle("T = 50")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p3 <- ggplot(df, aes(x, y)) + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal() + ggtitle("T = 200")
+
+grid.arrange(ggExtra::ggMarginal(p1 + geom_point(alpha = 0.1), type = "histogram"), 
+             ggExtra::ggMarginal(p2 + geom_point(alpha = 0.1), type = "histogram"), 
+             ggExtra::ggMarginal(p3 + geom_point(alpha = 0.1), type = "histogram"), 
+             nrow = 1)
+
+```
+
+An important property to consider when describing random walks is the mean squared displacement. The squared displacement is the squared distance from the origin, and we want to look at how this changes as time increases.
+
+Let's see how it look for this VAR(1) model
+```{r, cache=TRUE}
+ql <- apply(R, 1, quantile)
+
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 800), xlab="time", ylab="squared displacement",
+     cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+
+```
+
+As we can see, there is a lot of variability in how squared displacement changes with time for any single trajectory but when we average acrross replicates, the mean squared displacement increase linearly with time.
+
+We can build more interesting (realistic) random walks by using different distributions for steps and turns.
+
+## Correlated Random Walk
+
+In the so´called correlated random walk (CRW), the turning angle distribution is concentrated around zero. This causes directional persistence in movement. We can use circular distribution to simulate turns. For example a wrapped Cauchy or a von Mises. For the step length distribution we can use a Weibull to keep things similar to our VAR(1) model.
+
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 1000
+scale <- 1
+shape <- 2
+m <- 0
+kappa <- 10
+MU <- matrix(0, T, 2)
+phi <- runif(1, 0, 2 * pi)
+
+for(t in 2:T){
+  a <- rvm(1, mean = m, k = kappa)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+plot(MU, type = "l", asp = 1, xlab = "", ylab = "", 
+     cex.lab = 1.2 , font.lab = 2, cex.axis = 1, 
+     bty = "n", las = 1) 
+           
+```
+
+
+Let's see how the turning angles look like
+```{r}
+turns <- numeric(nrow(MU.diff) - 1)
+
+for(i in 2: nrow(MU.diff)){
+  v <- MU[i, ] - MU[i - 1, ]
+  w <- MU[i + 1, ] - MU[i, ]
+  angle <- atan2(w[2], w[1]) - atan2(v[2], v[1])
+  while (angle <= (-pi)) angle <- angle + 2 * pi
+  while (angle > pi) angle <- angle - 2 * pi
+  turns[i] <- angle
+}
+
+library(CircStats)
+rose.diag(turns, 30, prop = 1.5)
+```
+
+Lets look at changes with time for several replicate CRWs
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+m <- 0
+kappa <- 10.25
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+  phi <- runif(1,0,2*pi)
+  for(t in 2:T){
+  a <- rvm(1, mean = m, k = kappa)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+
+df <- data.frame(x = X[20,], y = Y[20,])
+p1 <- ggplot(df, aes(x, y))  + theme_classic() + xlim(-50,50) + ylim(-50,50) + coord_equal() + ggtitle("T = 20")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p2 <- ggplot(df, aes(x, y)) + theme_classic() + xlim(-100,100) + ylim(-100,100) + coord_equal() + ggtitle("T = 50")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p3 <- ggplot(df, aes(x, y)) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal() + ggtitle("T = 200")
+
+grid.arrange(ggExtra::ggMarginal(p1 + geom_point(alpha = 0.1), type = "histogram"), 
+             ggExtra::ggMarginal(p2 + geom_point(alpha = 0.1), type = "histogram"), 
+             ggExtra::ggMarginal(p3 + geom_point(alpha = 0.1), type = "histogram"), 
+             nrow = 1)
+```
+
+What about squared displacement?
+
+```{r}
+ql <- apply(R,1, quantile)
+
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     xlab="time", ylab="squared displacement",
+     cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+```
+
+
+
+# Exercises
+
+1. Simulate an VAR(1) random walk and show how the distribution of step lengths changes as $\sigma$ changes
+
+2. Simulate CRWs with varying degrees of concentration around the mean turning angle.
+
+3. Simulate a CRW with mean turning angle = to $\pi$
