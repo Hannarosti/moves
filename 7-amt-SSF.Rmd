@@ -1,0 +1,247 @@
+---
+title: "amt-SSF"
+author: "jmm"
+date: "9/26/2020"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2, width = 150)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=12, fig.height=4.5)
+```
+
+ ### Preamble
+ 
+ Load libraries
+```{r}
+library(ezknitr)
+library(knitr)
+library(lubridate)
+library(raster)
+library(move)
+library(amt) 
+library(tidyverse)
+library(here)
+
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+Read in the fisher tracks
+
+```{r}
+ssfdat <- read_rds("data/trk.Rdata")
+#ssfdat <- read_rds(here("data", "trk.Rdata"))
+```
+
+## Prepare environmental data
+
+Add environmental covariates, this is very similar to the first part of the RSF script.
+
+Again, we will use three covariates: land use class, elevation and population density
+
+```{r}
+landuse <- raster(here("data/landuse/landuse_study_area.tif"))
+elevation <- raster(here("data/elevation/ASTER ASTGTM2 Elevation-20100101120000000-0-0.tif"))
+popden <- raster(here("data/pop_den/pop_den.tif"))
+```
+
+
+First, we need to bring all thre layers to the same CRS.
+```{r}
+get_crs(ssfdat)
+landuse <- projectRaster(landuse, crs = get_crs(ssfdat), method = "ngb")
+elevation <- projectRaster(elevation, crs = get_crs(ssfdat))
+popden <- projectRaster(popden, crs = get_crs(ssfdat))
+```
+
+Plot the raster
+```{r}
+plot(landuse)
+plot(elevation)
+plot(popden)
+```
+
+Check the resolution 
+```{r}
+res(landuse)
+res(elevation)
+res(popden)
+```
+
+Assign each raster a meaningful name
+```{r}
+names(landuse) <- "landclass"
+names(elevation) <- "ele"
+names(popden) <- "popden"
+```
+
+Resolutions (and also extents) are different. This means, that we can not stack the rasters. There two options: 
+
+1. Resample rasters to the coarsest raster (popden) using the function  `raster::resample`. 
+2. Extract covariate values from each raster idendependetly. We will continue with second option.
+
+## Create steps and annotate with environmental data sampling rate
+```{r}
+summarize_sampling_rate_many(ssfdat, "id")
+```
+
+The approach is as follows:
+ 
+1. Resample track and filter bursts
+2. Convert track to steps
+3. Create random steps
+4. Extract covariate values
+ 
+For `M4`
+```{r}
+ssfdat %>% filter(id == "M4") %>% 
+  track_resample(rate = minutes(10), tolerance = minutes(1)) %>% 
+  filter_min_n_burst() %>% 
+  steps_by_burst() %>% 
+  random_steps() %>% 
+  extract_covariates(landuse) %>%  
+  extract_covariates(elevation) %>% 
+  extract_covariates(popden)
+```
+
+Because SSF coefficients depend on the time interval between observations, it is advantageous for all individuals to have the same sampling rate.  Here, all individuasl except M1 had 10 minute or 2 minute sampling rates. Lets resample all individuals except M1 to a 10 minute sampling rate.
+
+```{r}
+ssfdat <- ssfdat %>% 
+  filter(id != "M1") %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(data = map(
+    data, ~ .x %>% 
+      track_resample(rate = minutes(10), tolerance = minutes(1)) %>%
+      filter_min_n_burst() %>% 
+      steps_by_burst() %>% 
+      random_steps() %>% 
+      extract_covariates(landuse) %>%  
+      extract_covariates(elevation) %>% 
+      extract_covariates(popden))) %>% unnest()
+```
+
+Create landcover classes (as suggested by Scott Lapoint :)
+```{r}
+ssfdat <- ssfdat %>%  mutate(
+  landclass = as.character(landclass), 
+  landC = fct_collapse(landclass,
+      agri = c("81", "82"),
+      forest =c("41", "42", "43"),
+      shrub = c("52"),
+      grass = c("31", "71"),
+      wet = c("90", "95"),
+      other = c("11", "21", "22", "23", "24")))
+```
+
+Center and scale variables, make response numeric
+
+```{r}
+ssfdat <- ssfdat %>% mutate(elev = scale(ele), 
+                            popD = scale(popden), 
+                            case_ = as.numeric(case_))
+
+```
+Save SSF data for later (multiple animal)
+```{r}
+write_rds(ssfdat, "data/ssf_dat.rds")
+```
+
+## Explore the data
+
+Look Distribution of habitat class for used and available data
+```{r, fig.width=8, fig.height=8}
+ggplot(ssfdat, aes(x = landC, y = ..prop.., group = case_, colour = case_))+
+  geom_bar(position = "dodge", aes(fill = case_)) +
+  facet_wrap( ~ id, scales = "free")
+```
+
+## SSF model fitting
+ 
+Now, fit an SSF model to data from each animal.  Since not all animals experience all habitat types, let's just explore forest versus non-forest.
+
+```{r}
+ssfdat$forest <- ifelse(ssfdat$landC == "forest", 1, 0)
+```
+
+Fit an SSF to a single animal
+```{r}
+summary(fit_issf(case_ ~ elev + popD + forest + sl_ + log(sl_) + strata(step_id_), 
+                 data = filter(ssfdat, id == "M4")))
+```
+
+Fit an SSF model to data from each animal
+```{r}
+fitted_ssf <- function(data){
+    fit_issf(case_ ~ elev + popD + forest + sl_ + log(sl_) + strata(step_id_), data=data)
+}
+
+ssffits <-ssfdat %>%  
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(mod = map(data, fitted_ssf)) 
+```
+
+Look at first model
+```{r}
+ssffits$mod[[1]]
+```
+
+Now, use tidy to extract information about the model fits
+```{r}
+ssffits <- ssffits %>%
+  mutate(tidy = map(mod, ~ broom::tidy(.x$model)),
+         n = map_int(data, nrow))
+
+ssffits$tidy
+```
+
+Now, create data frame w/ the coefficients, etc
+```{r}
+ssf_coefs <- ssffits %>%
+  unnest(tidy) %>%
+  select(-(std.error)) 
+  
+# ssf_coefs <- ssffits %>%
+#   unnest(tidy) %>%
+#   select(-(std.error:conf.high)) 
+
+ssf_coefs %>% spread(term, estimate)
+```
+
+Plot coefficients
+
+```{r, fig.width=12, fig.height= 8}
+ssf_coefs %>% 
+  ggplot(., aes(x=1, y=estimate)) + 
+  geom_dotplot(binaxis="y", stackdir="center")+geom_hline(yintercept=0)+
+  facet_wrap(~term, scales="free")
+```
+
+Write out coefficients for MultipleAnimals.R
+```{r}
+save(ssf_coefs, file="data/ssfcoefs.Rdata")
+```
+
+## Document Footer	
+ 	
+Document spun with:  ezspin("FisherSSF.R",  fig_dir = "figures", keep_md=FALSE)  	
+ 	
+Session Information:	
+```{r} 	
+sessionInfo()	  
+```
