@@ -22,12 +22,14 @@ opts_knit$set(eval.after='fig.cap')
 knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=12, fig.height=4.5)
 ```
 
- ### Preamble
+The last bit of material "borrowed" (and modified) from the [Movebank workshop](https://movebankworkshopraleighnc.netlify.app/index.html), led by [John Fieberg](https://fieberg-lab.cfans.umn.edu/people/john-fieberg).
+
+
+### Preamble
  
- Load libraries
+Load libraries
 ```{r}
 library(ezknitr)
-library(knitr)
 library(lubridate)
 library(raster)
 library(move)
@@ -39,46 +41,51 @@ nest <- nest_legacy
 unnest <- unnest_legacy
 ```
 
-Read in the fisher tracks
+Recall that the idea behind step selection function is to define availability as a function of the way the animal moves. For this, we need to define a temporal scale for at which we observe the movement. Then we have to sample the landscape maps based on steps.
+
+The approach is as follows:
+ 
+1. Resample track and filter bursts
+2. Convert track to steps
+3. Create random steps
+4. Extract covariate values
+
+
+Read in the fisher tracks:
 
 ```{r}
-ssfdat <- read_rds("data/trk.Rdata")
-#ssfdat <- read_rds(here("data", "trk.Rdata"))
+ssfdat <- read_rds(here("data", "trk.Rdata"))
 ```
 
-## Prepare environmental data
+We can use the function `summarize_sampling_rate_many` from `amt` to see how the animal location was recorded:
 
-Add environmental covariates, this is very similar to the first part of the RSF script.
+```{r}
+summarize_sampling_rate_many(ssfdat, "id")
+```
 
-Again, we will use three covariates: land use class, elevation and population density
+Because SSF coefficients depend on the time interval between observations, it is advantageous for all individuals to have the same sampling rate. Here, all individuals except M1 had 10 minute or 2 minute sampling rates. 
+
+Let's resample all individuals except M1 to a 10 minute sampling interval.
+
+Before doing that, we prepare the environmental data. This is very similar to the first part of the RSF script. Again, we will use three covariates: land use class, elevation and population density.
+
+Te code below loads the environmental layers, bring all three layers to the same CRS.
 
 ```{r}
 landuse <- raster(here("data/landuse/landuse_study_area.tif"))
 elevation <- raster(here("data/elevation/ASTER ASTGTM2 Elevation-20100101120000000-0-0.tif"))
 popden <- raster(here("data/pop_den/pop_den.tif"))
-```
 
-
-First, we need to bring all thre layers to the same CRS.
-```{r}
-get_crs(ssfdat)
 landuse <- projectRaster(landuse, crs = get_crs(ssfdat), method = "ngb")
 elevation <- projectRaster(elevation, crs = get_crs(ssfdat))
 popden <- projectRaster(popden, crs = get_crs(ssfdat))
 ```
 
-Plot the raster
+Plot the rasters
 ```{r}
 plot(landuse)
 plot(elevation)
 plot(popden)
-```
-
-Check the resolution 
-```{r}
-res(landuse)
-res(elevation)
-res(popden)
 ```
 
 Assign each raster a meaningful name
@@ -88,26 +95,15 @@ names(elevation) <- "ele"
 names(popden) <- "popden"
 ```
 
-Resolutions (and also extents) are different. This means, that we can not stack the rasters. There two options: 
+Resolutions (and also extents) are different. This means, that we can not stack the rasters. We will extract covariate values from each raster interdependently. 
 
-1. Resample rasters to the coarsest raster (popden) using the function  `raster::resample`. 
-2. Extract covariate values from each raster idendependetly. We will continue with second option.
 
 ## Create steps and annotate with environmental data sampling rate
-```{r}
-summarize_sampling_rate_many(ssfdat, "id")
-```
 
-The approach is as follows:
- 
-1. Resample track and filter bursts
-2. Convert track to steps
-3. Create random steps
-4. Extract covariate values
- 
-For `M4`
+If we wanted to work with just one animal, such as `M4`, we could do
+
 ```{r}
-ssfdat %>% filter(id == "M4") %>% 
+ssfM4 <- ssfdat %>% filter(id == "M4") %>% 
   track_resample(rate = minutes(10), tolerance = minutes(1)) %>% 
   filter_min_n_burst() %>% 
   steps_by_burst() %>% 
@@ -117,7 +113,29 @@ ssfdat %>% filter(id == "M4") %>%
   extract_covariates(popden)
 ```
 
-Because SSF coefficients depend on the time interval between observations, it is advantageous for all individuals to have the same sampling rate.  Here, all individuasl except M1 had 10 minute or 2 minute sampling rates. Lets resample all individuals except M1 to a 10 minute sampling rate.
+There is a lot going on with the above code! Let's go by steps (no pun intended).
+
+`track_resample` is used to resample the track and only keep relocations that are approximately $10$ minutes apart, as defined by `rate` (within some `tolerance`, which as been specified to $1$ minute).
+
+`filter_min_n_burst` retains bursts with a minimum number (`min_n`) of relocations. The default is `min_n` = $3$.
+
+`steps_by_burst` calculates steps and turns by burst of locations.
+
+The generic function `random_steps` provides a methods for a `track_xy*`, where each observed step is paired with `n_control` control steps (i.e., steps that share the same starting location but have different turn angles and step lengths). The distributions for drawing step lengths and turning angles are usually obtained by fitting known parametric distribution to the observed step length and turn angles. 
+
+The function `random_steps` has seven arguments. For most use cases the defaults are just fine, but there might situation where the user wants to adjust some of the arguments. Some of the arguments are:  
+
+1. `x`: This is the `track_xy*` for which the random steps are created. That is, for each step in `x` `n_control` random steps are created. 
+2. `n_control`: The number of random steps that should be created for each observed step ($10$ by default).
+3. `sl_distr`: This is the distribution of the step lengths. By default a gamma distribution is fit to the observed step lengths of the `x`. But any `amt_distr` is suitable here. ^[See also `?fit_distr`.]
+4. `ta_distr`: This is the turn angle distribution, with the default being a von Mises distribution (not sure if other are implemented)
+5. `include_observed`: This argument is by default `TRUE` and indicates if the observed steps should be included or not.
+
+`extract_covariates` reads covariate values at raster maps. For steps, we can define `where` which by default is at the "end", but it could be set to "start", or "both".
+
+## Work with several individuals
+
+Because SSF coefficients depend on the time interval between observations, it is advantageous for all individuals to have the same sampling rate.  Here, all individuals except M1 had 10 minute or 2 minute sampling rates. Let's resample all individuals except M1 to a 10 minute sampling rate.
 
 ```{r}
 ssfdat <- ssfdat %>% 
@@ -132,31 +150,40 @@ ssfdat <- ssfdat %>%
       random_steps() %>% 
       extract_covariates(landuse) %>%  
       extract_covariates(elevation) %>% 
-      extract_covariates(popden))) %>% unnest()
+      extract_covariates(popden))) %>% 
+  unnest()
 ```
 
 Create landcover classes (as suggested by Scott Lapoint :)
 ```{r}
-ssfdat <- ssfdat %>%  mutate(
-  landclass = as.character(landclass), 
-  landC = fct_collapse(landclass,
-      agri = c("81", "82"),
-      forest =c("41", "42", "43"),
-      shrub = c("52"),
-      grass = c("31", "71"),
-      wet = c("90", "95"),
-      other = c("11", "21", "22", "23", "24")))
+ssfdat <- ssfdat %>%  
+  mutate(
+    landclass = as.character(landclass), 
+    landC = fct_collapse(landclass, 
+                         agri = c("81", "82"),
+                         forest =c("41", "42", "43"),
+                         shrub = c("52"),
+                         grass = c("31", "71"),
+                         wet = c("90", "95"),
+                         other = c("11", "21", "22", "23", "24")
+                         )
+    )
 ```
 
-Center and scale variables, make response numeric
+Center and scale variables, make response numeric. We also calculate log step and cos of turns for a future integrated step selection analysis.
 
 ```{r}
-ssfdat <- ssfdat %>% mutate(elev = scale(ele), 
-                            popD = scale(popden), 
-                            case_ = as.numeric(case_))
+ssfdat <- ssfdat %>% 
+  mutate(elev = scale(ele), 
+         popD = scale(popden), 
+         case_ = as.numeric(case_),
+         cos_ta = cos(ta_), 
+         log_sl = log(sl_)
+         )
 
 ```
-Save SSF data for later (multiple animal)
+
+Save SSF data for later (multiple animals)
 ```{r}
 write_rds(ssfdat, "data/ssf_dat.rds")
 ```
@@ -165,8 +192,9 @@ write_rds(ssfdat, "data/ssf_dat.rds")
 
 Look Distribution of habitat class for used and available data
 ```{r, fig.width=8, fig.height=8}
-ggplot(ssfdat, aes(x = landC, y = ..prop.., group = case_, colour = case_))+
-  geom_bar(position = "dodge", aes(fill = case_)) +
+ggplot(ssfdat, aes(x = landC, y = ..prop.., 
+                   group = case_, colour = as.factor(case_))) +
+  geom_bar(position = "dodge", aes(fill = as.factor(case_))) +
   facet_wrap( ~ id, scales = "free")
 ```
 
@@ -179,15 +207,19 @@ ssfdat$forest <- ifelse(ssfdat$landC == "forest", 1, 0)
 ```
 
 Fit an SSF to a single animal
+
+Here we use the `amt` function `fit_issf` which is just a wrapper for `survival::clogit` usable with pipes. The function `clogit` maximises the conditional likelihood of a logistic regression set up as "case and control". That is, for each case (a step in our case) there are paired control observations. The pairing is encoded in the `strata`, which in our case are the `step_id_`.
+
 ```{r}
-summary(fit_issf(case_ ~ elev + popD + forest + sl_ + log(sl_) + strata(step_id_), 
+summary(fit_issf(case_ ~ elev + popD + forest + strata(step_id_), 
                  data = filter(ssfdat, id == "M4")))
 ```
 
-Fit an SSF model to data from each animal
+Fit an SSF model to data from each animal. 
+
 ```{r}
 fitted_ssf <- function(data){
-    fit_issf(case_ ~ elev + popD + forest + sl_ + log(sl_) + strata(step_id_), data=data)
+    fit_issf(case_ ~ elev + popD + forest + strata(step_id_), data=data)
 }
 
 ssffits <-ssfdat %>%  
@@ -208,14 +240,14 @@ ssffits <- ssffits %>%
          n = map_int(data, nrow))
 
 ssffits$tidy
+
 ```
 
-Now, create data frame w/ the coefficients, etc
+Now, create data frame with the coefficients, etc
 ```{r}
 ssf_coefs <- ssffits %>%
   unnest(tidy) %>%
   select(-(std.error)) 
-  
 # ssf_coefs <- ssffits %>%
 #   unnest(tidy) %>%
 #   select(-(std.error:conf.high)) 
@@ -227,12 +259,13 @@ Plot coefficients
 
 ```{r, fig.width=12, fig.height= 8}
 ssf_coefs %>% 
-  ggplot(., aes(x=1, y=estimate)) + 
-  geom_dotplot(binaxis="y", stackdir="center")+geom_hline(yintercept=0)+
-  facet_wrap(~term, scales="free")
+  ggplot(., aes(x = 1, y = estimate)) + 
+  geom_dotplot(binaxis = "y", stackdir = "center") + 
+  geom_hline(yintercept = 0) +
+  facet_wrap(~ term, scales = "free")
 ```
 
-Write out coefficients for MultipleAnimals.R
+Write out coefficients
 ```{r}
 save(ssf_coefs, file="data/ssfcoefs.Rdata")
 ```
