@@ -17,16 +17,21 @@ csl: ecology.csl
 ```{r, echo=FALSE}
 library(knitr)
 library(bookdown)
-options(figure_counter = FALSE, digits = 2)
+options(figure_counter = FALSE, digits = 2, width = 150)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo=TRUE, 
+                      warning=FALSE, 
+                      message=FALSE, 
+                      fig.width=12, fig.height=4.5)
 ```
 
-Here we are going to use the package `amt` to perform a resource selection analysis (RSF).
+More material "borrowed" (and modified) from the [Movebank workshop](https://movebankworkshopraleighnc.netlify.app/index.html), led by [John Fieberg](https://fieberg-lab.cfans.umn.edu/people/john-fieberg).
+
+
+Here we are going to use the package `amt` to perform a resource selection analysis (RSF). First, we load the necesary packages, and set the random number generator.
 
 ```{r}
-library(ezknitr)
-library(knitr)
 library(lubridate)
 library(raster)
 library(move)
@@ -41,24 +46,25 @@ unnest <- unnest_legacy
 set.seed(10299)
 ```
 
-## Load data
-trk (fisher tracks) and fisher.dat created in the previous exercise
+Now we load the data created in the previous exercise
 
 ```{r}
 trk <- read_rds(here("data", "trk.Rdata"))
 ```
 
-
  ## RSF prep
  
- Generate random points within MCPs for a single individual using `amt` functions.
- Notes:
+Generate random points within a minimum convex polygon (mcp) for a single individual using `amt` functions.
+
+Notes:
  
- - It is common to generate points randomly, but other options are possible. 
- - In particular, it can beneficial to generate a systematically placed sample
- - Samples can also be generated using the *spsample* function in the `sp` package or using a GIS (note: `amt` uses the `spsample` function within its function `random_points`)
+- It is common to generate points randomly, but other options are possible. 
+- In particular, it can beneficial to generate a systematically placed sample.
+- Samples can also be generated using the *spsample* function in the `sp` package or using a GIS (note: `amt` uses the `spsample` function within its function `random_points`)
  - Other home range polygons could be used (e.g., kernel density, local convex hull
- etc.)
+ etc.). See how we used `rpoint` from the `spatstats` package to sample from a 99% KDE in [2-RSF](https://github.com/jmmorales/moves/blob/master/2-RSF.Rmd)
+ 
+Currently `amt` only has mcp implemented in the `random_points` funtion.
  
 #### Random points: illustrate for 1 individual
 
@@ -68,7 +74,7 @@ trk %>% filter(id == "F1") %>%
   plot()
 ```
 
-Illustrate systematic points (to do this, we need to create the mcp first)
+Illustrate systematic points
 ```{r}
 trk %>% filter(id == "F1") %>% 
   random_points(factor = 20, type = "regular") %>% 
@@ -83,13 +89,12 @@ trk %>% filter(id=="F1") %>%
 ```
 
 Now, let's generate points for all individuals. We can do this efficiently by making use of pipes (`%>%`), nested data frames, and then by adding a new column -- a list-column -- to `trks`
-   # you dont want to have the original point twice, hence drop data
 
 ```{r}
 avail.pts <- trk %>% 
   group_by(id) %>% 
   nest %>% 
-  mutate(rnd_pts = map(data, ~ random_points(., factor=20, type="regular"))) %>% 
+  mutate(rnd_pts = map(data, ~ random_points(., factor=20))) %>% 
   select(id, rnd_pts) %>% 
   unnest()
 ```
@@ -113,7 +118,6 @@ for(i in 1:luid){
 avail.pts <- as_tibble(avail.pts)
 ```
 
-
 ### Prepare environmental covariates
  
 We will use three covariates: land use class, elevation, and human population density
@@ -123,7 +127,7 @@ elevation <- raster(here("data/elevation/ASTER ASTGTM2 Elevation-201001011200000
 popden <- raster(here("data/pop_den/pop_den.tif"))
 ```
 
-First, we need to bring all thre layers to the same CRS.
+First, we need to bring all three layers to the same CRS using `projectRaster` from the `raster` package .
 ```{r}
 get_crs(trk)
 landuse <- projectRaster(landuse, crs = get_crs(trk), method = "ngb")
@@ -131,7 +135,7 @@ elevation <- projectRaster(elevation, crs = get_crs(trk))
 popden <- projectRaster(popden, crs = get_crs(trk))
 ```
 
-Now we plot the raster
+Now we plot the rasters
 ```{r}
 plot(landuse)
 plot(elevation)
@@ -156,7 +160,9 @@ Resolutions (and also extents) are different. This means, that we can not stack 
 
 1. Resample rasters to the coarsest raster (popden) using the function `raster::resample`. 
 
-2. Extract covariate values from each raster idendependetly. We will continue with second option.
+2. Extract covariate values from each raster idendependetly. 
+
+We will continue with second option.
 
 ```{r}
 avail.pts <- avail.pts %>% 
@@ -167,7 +173,7 @@ avail.pts <- avail.pts %>%
 avail.pts
 ```
 
-Create landcover classes (as suggested by Scott Lapoint :)
+Create landcover classes (as suggested by Scott Lapoint)
 
 ```{r}
 rsfdat <- avail.pts %>%  
@@ -181,7 +187,7 @@ rsfdat <- avail.pts %>%
       other = c("11", "21", "22", "23", "24")))
 ```
 
-Center and scale variables, make response numeric
+As usual, before doing any analyses, we center and scale the predicting variables. We also make the response (`case_`) numeric
 
 ```{r}
 rsfdat <- rsfdat %>% 
@@ -190,25 +196,25 @@ rsfdat <- rsfdat %>%
          case_ = as.numeric(case_))
 ```
 
-Save RSF data for later (multiple animal)
+Save RSF data for later (multiple animals)
 ```{r}
 write_rds(rsfdat, "data/rsf_dat.rds")
 ```
 
-## Explore the data
+## Some data exploration
 
-Look Distribution of habitat class for used and available observations
-#+fig.width=8, fig.height=8 
+Look at distribution of habitat type for used and available observations
 
-```{r}
-ggplot(rsfdat, aes(x=landC, y=..prop..,group=case_, colour=case_))+
-geom_bar(position="dodge", aes(fill=case_))+facet_wrap(~id, scales="free")
+```{r, fig.width=8, fig.height=8 }
+ggplot(rsfdat, aes(x=landC, y=..prop.., group=case_, colour=as.factor(case_) )) +
+geom_bar(position="dodge", aes(fill = as.factor(case_) )) +
+  facet_wrap(~id, scales = "free")
 
 ```
 
 ## RSF fitting
 
-Weight available data 
+Weight available data. This is a trick for the logistic regression.
 ```{r}
 rsfdat$w <- ifelse(rsfdat$case_ == 1, 1, 5000)
 ```
@@ -224,8 +230,11 @@ summary(glm(case_ ~ elev + popD + landC, data = subset(rsfdat, id == "M2"),
 Note, this individual did not experience all landcover classes
 
 ```{r, fig.width=6, fig.height=4}
-rsfdat %>% filter(id == "M2") %>% with(table(case_, landC))  
-rsfdat %>% filter(id == "M2") %>% count(landC, case_) # this works with the amt development version
+rsfdat %>% filter(id == "M2") %>% 
+  with(table(case_, landC))  
+
+rsfdat %>% filter(id == "M2") %>% 
+  count(landC, case_) # this works with the amt development version
   
 rsfdat$used<-as.factor(rsfdat$case_)
 rsfdat$used<-fct_recode(rsfdat$used, "avail" = "0", "used" = "1")
@@ -242,15 +251,21 @@ ggplot(subset(rsfdat, id=="M2"),
   labs(y = "Proportion", fill="used", x="Landcover") 
 ```
 
-Now, fit an RSF model to data from each animal. Since not all animals experience all habitat types, lets just explore forest versus non-forest
+Now, fit an RSF model to data from each animal. Since not all animals experience all habitat types, let's just explore forest versus non-forest
 
 ```{r}
 rsfdat$forest <- ifelse(rsfdat$landC == "forest", 1, 0)
+
 class(rsfdat) <- class(rsfdat)[-1] # this should be fixed in the dev version
-  rsffits <- rsfdat %>% group_by(id) %>% nest %>% 
-  mutate(mod = map(data, function(x) 
-    glm(case_ ~ elev + popD + forest, data = x, 
-        weight = w,family = binomial))) 
+
+rsffits <- rsfdat %>% 
+  group_by(id) %>% 
+  nest %>% 
+  mutate(mod = map(data, 
+                   function(x) glm(case_ ~ elev + popD + forest, 
+                                   data = x, 
+                                   weight = w, 
+                                   family = binomial))) 
 ```
 This stores a list of model fits in `rsffits`. 
 Let's look at first model
@@ -259,32 +274,42 @@ Let's look at first model
 rsffits$mod[[1]]
 ```
 
-Now, use tidy to extract information about the model fits into a nested data frame
+Now, use `tidy` to extract information about the model fits into a nested data frame
 
 ```{r}
 rsffits <- rsffits %>%
    dplyr::mutate(tidy = purrr::map(mod, broom::tidy),
-                 n = purrr::map(data, nrow) %>% simplify())
+                 n = purrr::map(data, nrow) %>% 
+                   simplify())
 rsffits 
 rsffits$tidy
 ```
 
-Now, create data frame w/ the coefficients, etc
+Now, create data frame with the coefficients, etc
 
 ```{r}
-rsf_coefs<-rsffits %>% unnest(tidy) %>% 
+rsf_coefs<-rsffits %>% 
+  unnest(tidy) %>% 
   select(-(std.error:p.value))
 rsf_coefs
 ```
 
 Plot coefficients
 ```{r, fig.width=12, fig.heigh=4}
-rsf_coefs %>% filter(term!="(Intercept)") %>% 
+rsf_coefs %>% 
+  filter(term!="(Intercept)") %>% 
   ggplot(., aes(x=1, y=estimate)) + 
   geom_dotplot(binaxis="y", stackdir="center") + 
   geom_hline(yintercept=0) + 
   facet_wrap(~term, scales="free")
 ```
+
+## Exercises
+
+1- Pick an animal and check how many available points you need for the regression coefficients to stabilize.
+
+2- Repeat the RSF analysis for one animal but using a regular sampling scheme for availability. Do you get the same results?
+
 
 ## Document Footer	
 Session Information:	
