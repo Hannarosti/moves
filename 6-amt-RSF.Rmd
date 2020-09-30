@@ -306,7 +306,7 @@ rsf_coefs %>%
 
 ## Exercises
 
-1- Pick an animal and check how many available points you need for the regression coefficients to stabilize.
+1- pick an animal and check how many background points you need for the regression coefficients to stabilize.
 
 2- Repeat the RSF analysis for one animal but using a regular sampling scheme for availability. Do you get the same results?
 

@@ -97,7 +97,6 @@ names(popden) <- "popden"
 
 Resolutions (and also extents) are different. This means, that we can not stack the rasters. We will extract covariate values from each raster interdependently. 
 
-
 ## Create steps and annotate with environmental data sampling rate
 
 If we wanted to work with just one animal, such as `M4`, we could do
@@ -269,6 +268,15 @@ Write out coefficients
 ```{r}
 save(ssf_coefs, file="data/ssfcoefs.Rdata")
 ```
+
+Exercises
+
+1. Pick an animal and fit an integrated step selection function including the log of step length as a covariate. Is there a change in other coefficients?
+
+2. Now include also the cosine for the turning angles.
+
+4. Compare empirical step length distributions to those simulated by `amt`
+
 
 ## Document Footer	
  	

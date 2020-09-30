@@ -17,9 +17,13 @@ csl: ecology.csl
 ```{r, echo=FALSE}
 library(knitr)
 library(bookdown)
-options(figure_counter = FALSE, digits = 2)
+options(figure_counter = FALSE, digits = 2, width = 150)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo=TRUE, 
+                      warning=FALSE, 
+                      message=FALSE, 
+                      fig.width=12, fig.height=4.5)
 ```
 
 # Spatio-Temporal Models 
@@ -68,7 +72,7 @@ The new model in \@ref(eq:wdst) has the same basic form as the original point pr
 
 ## Step Selection Functions
 
-The vast majority of STPP models for animal telemetry data have been developed using the conditional (weighted distribution) approach as an extension to the temporally static resource selection models.  Thus, we begin by investigating weighted distribution specifications.  The early developments of this style of spatio-temporal point process model were presented by @Arthur:96 and later generalized by @Rhodes:05.  @Arthur:96 presented the basic idea that availability could change as a function of the individual's position and time.  They suggested the use of a circular availability function 
+The vast majority of STPP models for animal telemetry data have been developed using the conditional (weighted distribution) approach as an extension to the temporally static resource selection models. Thus, we begin by investigating weighted distribution specifications. The early developments of this style of spatio-temporal point process model were presented by @Arthur:96 and later generalized by @Rhodes:05.  @Arthur:96 presented the basic idea that availability could change as a function of the individual's position and time. They suggested the use of a circular availability function 
 
 \begin{equation}
   f(\boldsymbol{\mu}_i | \boldsymbol{\mu}_{i-1}, r)=

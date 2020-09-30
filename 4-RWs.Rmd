@@ -17,9 +17,13 @@ csl: ecology.csl
 ```{r, echo=FALSE}
 library(knitr)
 library(bookdown)
-options(figure_counter = FALSE, digits = 2)
+options(figure_counter = FALSE, digits = 2, width = 150)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo=TRUE, 
+                      warning=FALSE, 
+                      message=FALSE, 
+                      fig.width=12, fig.height=4.5)
 ```
 
 Obtaining resource selection inference using the point process models described before is often straightforward when the temporal component of the process is unimportant or ignored.  However, point process models become increasingly sophisticated when the temporal component is added explicitly. If the physical process of movement itself is of interest, it may be useful to take a different modeling perspective. An alternative to the point process perspective considers the data and underlying process in the time domain directly, allowing for explicit forms of temporal dependence. If the process is considered in discrete time, we are firmly in the realm of time series statistics. We begin our discussion of continuous-space discrete-time movement models by introducing the random walk and then make a sequence of extensions that provide additional insight about the dynamics and behavior of moving animals.  

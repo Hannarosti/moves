@@ -17,9 +17,13 @@ csl: ecology.csl
 ```{r, echo=FALSE}
 library(knitr)
 library(bookdown)
-options(figure_counter = FALSE, digits = 2)
+options(figure_counter = FALSE, digits = 2, width = 150)
 opts_knit$set(eval.after='fig.cap')
-knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo=TRUE, 
+                      warning=FALSE, 
+                      message=FALSE, 
+                      fig.width=12, fig.height=4.5)
 ```
 
 # Resource Selection Functions
@@ -56,13 +60,14 @@ The selection function $g$ can also assume any positive form, however, two forms
 \end{equation}
 
 The $\mathbf{x}'(\boldsymbol\mu_i)\boldsymbol\beta$ term in \@ref(eq:logitlink) resembles the mean function in linear regression and the forms of selection as link functions commonly used in generalized linear modeling with Poisson and Bernoulli likelihoods. In most GLMs, the value of one is included as the first covariate in $\mathbf{x}$ so that the first element of $\boldsymbol\beta$ (i.e., $\beta_0$) acts as an intercept in the model.  However, if we use an intercept in the exponential selection function, it will cancel in the numerator and denominator of \@ref(eq:wd).  Thus, an intercept is not included in RSF models that rely on \@ref(eq:wd) directly when the selection function is exponential.   
+
 The main difference in the resulting inference from the two common forms of selection functions is that the logit form (sometimes referred to as a resource selection probability function RSPF, [@LeleKeim:06]), \@ref(eq:logitlink) allows for inference directly on the probability of selection, whereas the exponential form limits inference to the relative intensity of selection.  However, even in this case, inference concerning the direction and magnitude of environmental effects on selection can still be obtained directly by learning about $\boldsymbol\beta$.  Thus, despite this apparent shortcoming, most resource selection studies still rely on the exponential form for the model.  Under uniform availability, the RSF with exponential selection function is 
 
 \begin{equation}
   p(\boldsymbol{\mu}_i | \boldsymbol\beta) \equiv \frac{\exp(\mathbf{x}'(\boldsymbol{\mu}_i)\boldsymbol\beta)}{\int \exp(\mathbf{x}'(\boldsymbol\mu)\boldsymbol\beta) d \boldsymbol\mu} \; . (\#eq:wdexp)
 \end{equation}
 
-To form a likelihood under the assumption of conditional independence for the points (i.e., $\boldsymbol\mu_i$, for $i=1,\ldots,n$), we take the product of @ref(eq:wdexp) over the $n$ individual locations
+To form a likelihood under the assumption of conditional independence for the points (i.e., $\boldsymbol\mu_i$, for $i=1,\ldots,n$), we take the product of \@ref(eq:wdexp) over the $n$ individual locations
 
 \begin{equation}
   \prod_{i=1}^n \frac{\exp(\mathbf{x}'(\boldsymbol{\mu}_i)\boldsymbol\beta)}{\int \exp(\mathbf{x}'(\boldsymbol\mu)\boldsymbol\beta) d \boldsymbol\mu} \; . 
@@ -73,9 +78,9 @@ A maximum likelihood estimate (MLE) for $\boldsymbol\beta$ is obtained by maximi
 
 ## Implementation of RSF Models
 
-There are at least three main methods for fitting RSF models [@WartonShepherd:10 ; @Aarts:12].  Perhaps the most common implementation of RSF models takes the form of logistic regression.  This is followed closely by Poisson regression and then resource utilization function approaches (which we discuss in the next section). 
+There are at least three main methods for fitting RSF models [@WartonShepherd:10 ; @Aarts:12].  Perhaps the most common implementation of RSF models takes the form of logistic regression.  This is followed closely by Poisson regression. 
 
-We begin by describing the logistic regression approach to fitting RSF models.  The main idea in the logistic regression approach is to convert the individual spatial locations into a binary data set where ones are used to represent the observed locations and zeros represent the available locations.  That is, a background sample is typically taken from the availability distribution $f$ in such a way that it represents a large but finite set of possible locations the individual could have occupied.  The environmental covariates ($\mathbf{x}_i$) at the individual locations ($\boldsymbol\mu_i$) are associated with each of the ones for $i=1,\ldots,n$ and similarly, the covariates are recorded for the background sample of $m-n$ locations.  The response variable is then specified as $\mathbf{y}\equiv(1,\ldots,1,0,\ldots,0)'$ and used in a standard logistic regression with the complete set of covariates.  That is, the model becomes $y_i \sim \text{Bern}(p_i)$ where $\text{logit}(p_i)=\beta_0+\mathbf{x}'_i \boldsymbol\beta$, for $i=1,\ldots,m$ total binary observations.   
+We begin by describing the logistic regression approach to fitting RSF models. The main idea in the logistic regression approach is to convert the individual spatial locations into a binary data set where ones are used to represent the observed locations and zeros represent the available locations. That is, a background sample is typically taken from the availability distribution $f$ in such a way that it represents a large but finite set of possible locations the individual could have occupied.  The environmental covariates ($\mathbf{x}_i$) at the individual locations ($\boldsymbol\mu_i$) are associated with each of the ones for $i=1,\ldots,n$ and similarly, the covariates are recorded for the background sample of $m-n$ locations.  The response variable is then specified as $\mathbf{y}\equiv(1,\ldots,1,0,\ldots,0)'$ and used in a standard logistic regression with the complete set of covariates.  That is, the model becomes $y_i \sim \text{Bern}(p_i)$ where $\text{logit}(p_i)=\beta_0+\mathbf{x}'_i \boldsymbol\beta$, for $i=1,\ldots,m$ total binary observations.   
 
 Let's do this for the mountain lion data. First, we load the necesary packages, functions, and data. The data includes GPS locations, and raster maps for elevation, exposure, and slope. We also have the coordinates for the centers of the pixels in the raster maps.
 
@@ -91,7 +96,7 @@ n <- dim(mtnlion.df)[1]
 ```
 
 Now we define the sampling area using the 99% isoplet of a KDE
-```{r}
+```{r, fig.height=5, fig.width=6}
 m.kde <- kde2d(mtnlion.df$x, mtnlion.df$y, 
                      n = 4 * c(ncol(elevation.rast), 
                                nrow(elevation.rast)), 
@@ -130,7 +135,7 @@ bg.ppp = rpoint(n.bg, win = hr)
 
 Let's compare the observed and "background" points we just generated:
 
-```{r}
+```{r, fig.height=5, fig.width=6}
 layout(matrix(1:2,1,2, byrow = TRUE))
 plot(pts.ppp, type = "n", cex=1.2, pch=19, col = rgb(0,0,0, alpha = 0.2),
      xlab = "", ylab = "", main = "", asp = TRUE)
@@ -142,7 +147,7 @@ points(bg.ppp, pch = 19, col = rgb(0,0,0, alpha = 0.4))
 
 This randomly generated background sample represents what is "available" for this animal within its home range. We will use it to estimate RSF using the logistic regression approach. As covariates, we will consider elevation, slope, and exposure. Let's extract the values for these covariates from the corresponding raster maps and scale the values of the environmental covariates (why we do this?):
 
-```{r, fig.height=3.5, fig.width=6}
+```{r, fig.height=4, fig.width=8}
 grid.hr.TF <- inside.owin(grid.centers[,1], grid.centers[,2], hr)
 elev.NA.rast <- elevation.rast
 slope.NA.rast <- slope.rast
@@ -207,7 +212,7 @@ kable(summary(logistic.reg)$coefficients)
 
 For the Poisson regression, we need to count the number of locations inside each grid cell. The following lines of code do that:
 
-```{r}
+```{r, fig.height=5, fig.width=6}
 grid.hr.TF <- inside.owin(grid.centers[,1], grid.centers[,2], hr)
 elev.NA.rast <- elevation.rast
 values(elev.NA.rast)[!grid.hr.TF] <- NA
@@ -219,8 +224,7 @@ mtnlion.table <- table(mtnlion.cells)
 mtnlion.cell.idx <- as.numeric(attr(table(mtnlion.cells), "dimnames")$mtnlion.cells)
 values(mtnlion.count.rast)[mtnlion.cell.idx] <- mtnlion.table
 
-op <- par(bty = "n")
-plot(mtnlion.count.rast, axes = FALSE)
+plot(mtnlion.count.rast, axes = FALSE, bty = "n")
 ```
 
 In the Poisson regression approach to fitting RSF models, the support of the individual locations ${\cal M}$ is gridded up into $L$ areal units (i.e., grid cells or pixels).  The covariates ($\mathbf{x}_l$ for $l=1,\ldots,L$) are associated with each grid cell and the individual locations ($\boldsymbol\mu$) are counted in each grid cell and recorded in an $L\times 1$ vector of cell frequencies $\mathbf{z}$.  The model becomes $z_l \sim \text{Pois}(\lambda_l)$ where $\log{\lambda_l}=\beta_0+\mathbf{x}'_l \boldsymbol\beta$ for all grid cell counts $l=1,\ldots,L$.  The intercept $\beta_0$ is ignored and the estimates of $\boldsymbol\beta$ are used for resource selection inference.   
@@ -251,10 +255,7 @@ poisson.reg <- glm(y ~ elev + slope + exposure,
 kable(summary(poisson.reg)$coefficients)
 ```
 
-
-The striking result is that both the logistic and Poisson regression approaches to implementing the RSF model yield the same inference about $\boldsymbol\beta$ under certain conditions [@WartonShepherd:10; @Aarts:12].  In the mountain lion example, we fit the spatial point process model using both Poisson and logistic regression to yield inference for the selection coefficients $\boldsymbol\beta$ based on the standardized environmental covariates.   
-
-The results indicate that both the logistic and Poisson regression approach to fitting the point process model are very similar:
+The striking result is that both the logistic and Poisson regression approaches to implementing the RSF model yield the same inference about $\boldsymbol\beta$ under certain conditions [@WartonShepherd:10; @Aarts:12]. The results for the mountain lion example indicate that both the logistic and Poisson regression approach to fitting the point process model are very similar:
 
 ```{r, echo=FALSE}
 res <- cbind(summary(logistic.reg)$coefficients[2:4,c(1,4)], 
@@ -265,22 +266,19 @@ dimnames(res)[[2]][c(2,4)] = "p-value"
 kable(res)
 ```
 
-
-\begin{table}[htp]
-\centering
-\caption{Estimated resource selection coefficients using logistic (LR) and Poisson regression (PR) based on the covariates in Figure~\ref{fig:mtnlion_covs}.}
-\begin{tabular}{l c c c c }
-  \\  \hline
-  & \multicolumn{2}{c}{LR} & \multicolumn{2}{c}{PR}\\  
-  & estimate & p-value & estimate & p-value \\ \hline
-  (a) elevation & $-0.311$ & $0.008$ & $-0.295$ & $0.008$  \\ \hline
-  (b) slope & $0.244$ & $0.033$ & $0.215$ & $0.035$ \\ \hline
-  (c) exposure & $-0.139$ & $0.265$ & $-0.131$ & $0.286$ \\ \hline
-\end{tabular}
-\label{tab:mtnlion_rsf}
-\end{table}  
 Furthermore, resource selection inference resulting from the model fits indicates that this mountain lion is selecting for lower elevations and steeper slopes relative to available terrain; there is no evidence of selection for exposure given the other covariates in the model.    
 
-The necessary conditions for equivalence in the inference are that the background sample used in the logistic regression and the number of grid cells used in the Poisson regression often need to be very large; sometimes on the order of tens of thousands [@Northrup:13].  The reason that a large background sample or number of grid cells is so important is that it is implicitly computing the integral in the denominator of the RSF model \@ref(eq:wdexp) for us. Perhaps the most common mistake made in most classical RSF implementations is that a large enough background sample is not used.  The easiest way to check whether a large enough sample is chosen is to try larger background sample sizes until the inference stabilizes.    
+The necessary conditions for equivalence in the inference are that the background sample used in the logistic regression and the number of grid cells used in the Poisson regression often need to be very large; sometimes on the order of tens of thousands [@Northrup:13].  The reason that a large background sample or number of grid cells is so important is that it is implicitly computing the integral in the denominator of the RSF model \@ref(eq:wdexp) for us. Perhaps the most common mistake made in most classical RSF implementations is that a large enough background sample is not used.  The easiest way to check whether a large enough sample is chosen is to try larger background sample sizes until the inference stabilizes. 
+
+# Exercises
+
+1. Using the mountain lion example, compare regression coefficients for a logistic regression version of an RSF with background samples of sizes from $100$ to $1000$ using $100$ increments. That is, you will have to make $10$ regressions.
+
+2. Make a plot of background sample size on the $x$ axis and the estimated coefficient for elevation on the $y$ axis. Bonus if you include confidence intervals.
+
+3. Compare regression coefficients for a logistic regression version of an RSF using different support for the background samples:
+    + convex hull
+    + KDE of 90%
+    + KDE of 99%
 
 ## References
