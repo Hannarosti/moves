@@ -1,0 +1,152 @@
+---
+title: "Correlated Random Walk with measurement error"
+author: "Juan M. Morales"
+date: "6/3/2018"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+In a classical CRW, the turning angle distribution is concentrated around zero. Lets simulate a trajectory where steps are sampled from a Weibull and turns from a wrapped Cauchy:
+
+```{r}
+library(CircStats)
+set.seed(2345)
+T <- 200
+scale <- 1
+shape <- 1.5
+m <- 0
+rho <- 0.8
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+for(t in 2:T){
+  a <- rwrpcauchy(1, location = m, rho = rho)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+
+plot(MU, type = "l", asp = 1, xlab = "", ylab = "", lwd = 1,
+     cex.lab = 1.2, bty = "n", las = 1)
+```
+
+Even under the best circumstances we may get some error on location. Lets add some Normal error to the location data:
+
+```{r}
+s_obs <- 0.8
+xo <- MU[,1] + rnorm(dim(MU)[1], 0, s_obs)
+yo <- MU[,2] + rnorm(dim(MU)[1], 0, s_obs)
+
+
+plot(xo, yo, type = "l", asp = 1, xlab = "", ylab = "", lwd = 1,
+     cex.lab = 1.2, bty = "n", las = 1)
+
+```
+
+If we model steps and turns, we cannot simply include error in these variables because there is a non-linear relationship between error in location and error in steps and turns. Lets compare true steps and turns with observed ones:
+
+```{r}
+library(moveHMM)
+true <- prepData(as.data.frame(MU), type = "UTM", coordNames = c("V1","V2"))
+obs <- prepData(data.frame(xo,yo), type = "UTM", coordNames = c("xo","yo"))
+
+layout(matrix(1:2,1,2, byrow = TRUE))
+hist(obs$step - true$step, 30, main = "", xlab = "obs - true",
+     cex.lab = 1.2 ,bty = "n", las = 1)
+hist(obs$angle - true$angle, 30, main = "", xlab = "obs - true",
+     cex.lab = 1.2 ,bty = "n", las = 1)
+
+```
+
+So, we need to translate modelled steps and turns into observed locations. We can implement this in `Stan`:
+
+
+```{r}
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+data_list <- list(
+  T = T, 
+  xo = xo, 
+  yo = yo 
+)
+
+params <- c("m", "rho", "scale", "shape", "x", "y", "sigma")
+
+fit <- stan(file = "Stan_code/crw_oe.stan", 
+            data = data_list, 
+            iter = 10000, 
+            thin = 5,
+            chains = 3, 
+            pars = params, 
+            # control = list(adapt_delta = 0.95)
+            )
+```
+
+Let's make sure that everything has converged and then plot posteriors and true movement parameter values as well as the magnitude of the error
+
+```{r}
+plot(fit, plotfun = "rhat")
+
+m.pars <- extract(fit, pars = c("m", "rho", "scale", "shape", "sigma"))
+
+op <- par(mar = c(5, 4, 1, 2) + 0.1, cex.lab = 1.2, bty = "n", las = 1)
+
+layout(matrix(1:6,3,2, byrow = TRUE))
+plot(density(m.pars$m), main="", xlab="m")
+abline(v=m, lwd=2)
+plot(density(m.pars$rho), main="", xlab="rho")
+abline(v=rho, lwd=2)
+plot(density(m.pars$scale), main="", xlab="scale")
+abline(v=scale, lwd=2)
+plot(density(m.pars$shape), main="", xlab="shape")
+abline(v=shape, lwd=2)
+plot(density(m.pars$sigma), main="", xlab="sigma obs")
+abline(v=s_obs, lwd=2)
+
+```
+
+We can see how the fitted trajectory (green) compares to the observed one (black dots) and to the true one (red):
+
+```{r, fig.height=6, fig.width=6}
+cbbPalette <- c("#009E73", "#D55E00", "#CC79A7")
+mu.s <- extract(fit, pars=c("x","y"))
+
+x_summary <- summary(fit, pars = "x", probs = c(0.1, 0.9))$summary
+y_summary <- summary(fit, pars = "y", probs = c(0.1, 0.9))$summary
+
+op <- par(cex.lab = 1.2 , cex.axis = 1, bty = "n", las = 1)
+plot(1, type="n", xlab="", ylab="", 
+     xlim=c(min(MU[,1]), max(MU[,1])), 
+     ylim=c(min(MU[,2]), max(MU[,2])), asp=1)
+
+for(i in 1:400){
+  idx <- sample(1:1500,1)
+  lines(mu.s$x[idx,],mu.s$y[idx,], col = gray(0.4,0.01))
+}
+
+points(xo, yo, type = "o", pch = 16, col = 1, cex=0.5)
+lines(MU, col=cbbPalette[2], lwd=1)
+lines(x_summary[,1], y_summary[,1], col=cbbPalette[1], lwd=1)
+par(op)
+```
+
+# Excersise 
+
+- Write a `Stan` model to fit a CRW without messurement error and use it to estimate the step and turns parameter for the data with and without observation error. How do the estimates compare?
+
