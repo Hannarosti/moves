@@ -1,0 +1,711 @@
+---
+author: 
+title: "Discrete time models"
+subtitle: ""
+date: 
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2, width = 150)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), echo=TRUE, warning=FALSE, message=FALSE, fig.width=12, fig.height=4.5)
+```
+
+# Random Walks
+
+## AR(1)
+
+Lets look at one realization
+```{r}
+library(MASS)
+set.seed(1234)
+T <- 1000
+rho <- 1
+M <- rho * diag(2)
+s2 <- 0.5
+MU <- matrix(0, T, 2)
+S <- M * (s2)
+
+for(t in 2:T){
+  MU[t, ] <- MU[t-1, ] + mvrnorm(1, mu = c(0, 0), S)
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) #, xaxt='n', yaxt='n')
+par(op)
+```
+
+Now we simulate several trajectories to see changes with time
+```{r}
+set.seed(1234)
+T <- 200
+rho <- 1
+M <- rho * diag(2)
+s2 <- 0.5
+MU <- matrix(0, T, 2)
+S <- M * (s2)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+for(t in 2:T){
+  MU[t, ] <- MU[t-1, ] + mvrnorm(1, mu = c(0, 0), S)
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-40,40) + ylim(-40,40) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+```
+
+We can also look at the squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 800), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
+We can also look at the step length distribution and see that it follows a Weibull with shape = 2 and scale = sqrt(2 * s2) 
+```{r}
+MU.diff <- apply(MU, 2, diff)
+MU.sl <- sqrt(apply(MU.diff^2, 1, sum))
+hist(MU.sl, prob = TRUE, col=8, breaks=60, xlab="step length",main="",cex.axis=1.2,cex.lab=1.5,cex.main=1.5)
+curve(dweibull(x,2,sqrt(2*s2)),add=TRUE,lwd=3,from=0,to=max(MU.sl))
+
+```
+
+We can check that the turning angle distribution in this case is uniform
+```{r}
+turns <- numeric(dim(MU.diff)[1] - 1)
+
+for(i in 2: dim(MU.diff)[1] ){
+  v <- MU[i, ] - MU[i - 1, ]
+  w <- MU[i + 1, ] - MU[i, ]
+  angle <- atan2(w[2], w[1]) - atan2(v[2], v[1])
+  while (angle <= (-pi)) angle <- angle + 2 * pi
+  while (angle > pi) angle <- angle - 2 * pi
+  turns[i] <- angle
+}
+
+library(CircStats)
+rose.diag(turns, 30, prop = 3.5)
+```
+
+## Correlated Random Walk
+
+Turning angle distribution concentrated around zero.  We can use circular distribution to simulate turns. For example a wrapped Cauchy or a von Mises.
+
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 1000
+scale <- 1
+shape <- 2
+m <- 0
+kappa <- 10
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+for(t in 2:T){
+  a <- rvm(1, mean = m, k = kappa)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) 
+par(op)            
+```
+
+Lets look at changes with time
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+m <- 0
+kappa <- 10.25
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+  phi <- runif(1,0,2*pi)
+  for(t in 2:T){
+  a <- rvm(1, mean = m, k = kappa)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-50,50) + ylim(-50,50) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-100,100) + ylim(-100,100) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+Squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
+
+Compare with a CRW using wrapped Cauchy for turns
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+m <- 0
+rho <- 0.95
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+for(i in 1:nreps){
+  phi <- runif(1,0,2*pi)
+  for(t in 2:T){
+  a <- rwrpcauchy(1, location = m, rho = rho)
+  if (a > pi) 
+    a <- a - 2 * pi
+  if (a < -pi) 
+    a <- a + 2 * pi
+  phi <- phi + a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-25,25) + ylim(-25,25) 
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-50,50) + ylim(-50,50)
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[100,], y = Y[100,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1)  + theme_classic() + xlim(-150,150) + ylim(-150,150)
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+## Biased RW
+Instead of modelling turns, we model variability around a particular compass direction
+
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 100
+scale <- 1
+shape <- 2
+m <- pi/3
+kappa <- 5
+MU <- matrix(0, T, 2)
+#phi <- runif(1,0,2*pi)
+
+for(t in 2:T){
+  a <- rvm(1, mean = m, k = kappa)
+  phi <- a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) 
+par(op)            
+```
+
+Changes with time
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+m <- pi/3
+kappa <- 5
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+  phi <- runif(1,0,2*pi)
+  for(t in 2:T){
+  a <- rvm(1, mean = phi, k = kappa)
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * a)), Im(exp((0+1i) * a)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+Squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 10000), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
+Distribution of movements around mean direction
+```{r}
+library(CircStats)
+rose.diag(rvm(1000, mean = pi/3, k = 5), 30, prop = 2.5)
+
+```
+
+
+## Centrally Biased RW
+We model variability in movement direction around the compass direction that would lead to a center of attraction (a fixed and central point in space).
+
+```{r}
+library(CircStats)
+set.seed(2)
+T <- 1000
+scale <- 1
+shape <- 2
+kappa <- 0.2
+MU <- matrix(0, T, 2)
+H  <- matrix(0, 1, 2) # location of center
+MU[1, ] <- runif(2)
+phi <- numeric(T) * NA
+s <- numeric(T) * NA
+
+for(t in 2:T){
+  w <- H - MU[t - 1, ]
+  m <- atan2(w[2], w[1]) 
+  a <- rvm(1, mean = m, k = kappa)
+  phi[t] <- a
+  s[t] <- rweibull(1, shape = shape, scale = scale) 
+  move <- s[t] * c(Re(exp((0+1i) * phi[t])), Im(exp((0+1i) * phi[t])))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) #, xaxt='n', yaxt='n')
+par(op)            
+```
+
+```{r}
+rose.diag(phi[-1], 30, prop = 2.5)
+```
+
+```{r}
+MU.diff <- apply(MU, 2, diff)
+MU.sl <- sqrt(apply(MU.diff^2, 1, sum))
+hist(MU.sl, prob = TRUE, col=8, breaks=60, xlab="step length",main="",cex.axis=1.2,cex.lab=1.5,cex.main=1.5)
+curve(dweibull(x,shape,scale),add=TRUE,lwd=3,from=0,to=max(MU.sl))
+
+```
+
+Changes with time
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+kappa <- 0.2
+H  <- matrix(0, 1, 2) # location of center
+MU <- matrix(0, T, 2)
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+  MU[1, ] <- runif(2)
+for(t in 2:T){
+  w <- H - MU[t - 1, ]
+  m <- atan2(w[2], w[1]) 
+  a <- rvm(1, mean = m, k = kappa)
+  phi <- a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-20,20) + ylim(-20,20) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-20,20) + ylim(-20,20) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[100,], y = Y[100,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-20,20) + ylim(-20,20) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+Squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 100), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
+## Biased Correlated RW
+Movement direction is a compromise between previous movement direction and the direction that would lead to a center of attraction (a fixed point in space).
+
+```{r}
+library(CircStats)
+set.seed(1)
+T <- 1000
+scale <- 1
+shape <- 2
+kappa <- 5
+beta <- 0.2
+MU <- matrix(0, T, 2)
+H  <- matrix(0, 1, 2) # location of center
+MU[1, ] <- c(100,0) #runif(2)
+phi <- numeric(T) * NA
+s <- numeric(T) * NA
+phi[1] <- runif(1,0,2*pi)
+
+for(t in 2:T){
+  w  <- H - MU[t - 1, ]
+  dh <- atan2(w[2], w[1]) 
+  ya <- sin(phi[t-1]) + beta*sin(dh)
+  xa <- cos(phi[t-1]) + beta*cos(dh)    
+  m  <- atan2(ya,xa)
+  a  <- rvm(1, mean = m, k = kappa)
+  phi[t] <- a
+  s[t] <- rweibull(1, shape = shape, scale = scale) 
+  move <- s[t] * c(Re(exp((0+1i) * phi[t])), Im(exp((0+1i) * phi[t])))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) #, xaxt='n', yaxt='n')
+par(op)            
+```
+
+```{r}
+library(moveHMM)
+rose.diag(phi[-1], 30, prop = 2.5)
+tmp <- prepData(as.data.frame(MU), type = "UTM", coordNames = c("V1","V2") )
+turns <- tmp$angle[2:999]
+rose.diag(turns, 30, prop = 2.5)
+```
+
+```{r}
+MU.diff <- apply(MU, 2, diff)
+MU.sl <- sqrt(apply(MU.diff^2, 1, sum))
+hist(MU.sl, prob = TRUE, col=8, breaks=60, xlab="step length",main="",cex.axis=1.2,cex.lab=1.5,cex.main=1.5)
+curve(dweibull(x,shape,scale),add=TRUE,lwd=3,from=0,to=max(MU.sl))
+
+```
+
+Changes with time
+```{r}
+library(CircStats)
+set.seed(1234)
+T <- 200
+scale <- 1
+shape <- 2
+kappa <- 5
+beta <- 0.2
+MU <- matrix(0, T, 2)
+H  <- matrix(0, 1, 2) 
+phi <- runif(1,0,2*pi)
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+for(i in 1:nreps){
+  MU[1, ] <- runif(2)
+for(t in 2:T){
+  w  <- H - MU[t - 1, ]
+  dh <- atan2(w[2], w[1]) 
+  ya <- sin(phi) + beta*sin(dh)
+  xa <- cos(phi) + beta*cos(dh)    
+  m  <- atan2(ya,xa)
+  a  <- rvm(1, mean = m, k = kappa)
+  phi <- a
+  s <- rweibull(1, shape = shape, scale = scale) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-50,50) + ylim(-50,50) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-50,50) + ylim(-50,50) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-50,50) + ylim(-50,50) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+Squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 300), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
+## Velocity models
+```{r}
+library(mvtnorm)
+library(moveHMM)
+set.seed(1234)
+
+theta <- 0
+gamma <- 0.9
+s2 <- 0.5
+T <- 1000
+
+M=matrix(0,2,2)
+M[1,1]=cos(theta)
+M[1,2]=-sin(theta)
+M[2,1]=sin(theta)
+M[2,2]=cos(theta)
+M=gamma*M
+
+MU=matrix(0,T,2)
+Delta=matrix(0,T,2)
+Delta[1,]=rnorm(2,0,sqrt(s2))
+for(t in 2:T){
+  Delta[t,]=rmvnorm(1,M%*%Delta[t-1,],s2*diag(2))
+  MU[t,]=MU[t-1,]+Delta[t,]
+}
+
+op <- par(cex.lab = 1.2 , font.lab = 2, cex.axis = 1, bty = "n", las = 1)
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) #, xaxt='n', yaxt='n')
+par(op)            
+
+datos <- prepData(as.data.frame(MU), type = "UTM", coordNames = c("V1","V2"))
+
+```
+
+Lets look at the turning angle distribution
+```{r}
+tmp <- prepData(as.data.frame(MU), type = "UTM", coordNames = c("V1","V2") )
+turns <- tmp$angle[2:999]
+rose.diag(turns, 30, prop = 2.5)
+```
+
+And the step lenght distribution (fitted to a Weibull and a Gamma)
+```{r}
+MU.diff <- apply(MU, 2, diff)
+MU.sl <- sqrt(apply(MU.diff^2, 1, sum))
+hist(MU.sl, prob = TRUE, col=8, breaks=60, xlab="step length",main="",cex.axis=1.2,cex.lab=1.5,cex.main=1.5)
+tm <- fitdistr(MU.sl, "weibull")
+tg <- fitdistr(MU.sl, "gamma")
+curve(dweibull(x,tm$estimate[1],tm$estimate[2]),add=TRUE,lwd=3,from=0,to=max(MU.sl))
+curve(dgamma(x,tg$estimate[1],tg$estimate[2]),add=TRUE,lwd=3,from=0,to=max(MU.sl), col=2)
+#curve(dweibull(x,2,sqrt(2*s2)),add=TRUE,lwd=3,from=0,to=max(MU.sl))
+
+```
+
+
+One interesting property of these models is that step length is larger when turning angles are small
+```{r}
+tmp <- prepData(as.data.frame(MU), type = "UTM", coordNames = c("V1","V2") )
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(tmp$step, tmp$angle, col=gray(0.5,0.5), pch=16, xlab="step", ylab="turn")
+par(op)
+```
+
+Changes with time
+```{r}
+
+theta <- 0
+gamma <- 0.9
+s2 <- 0.5
+T <- 200
+
+M=matrix(0,2,2)
+M[1,1]=cos(theta)
+M[1,2]=-sin(theta)
+M[2,1]=sin(theta)
+M[2,2]=cos(theta)
+M=gamma*M
+
+nreps <- 1000
+X <- matrix(NA,T,nreps)
+Y <- matrix(NA,T,nreps)
+R <- matrix(0,T,nreps)
+
+for(i in 1:nreps){
+MU=matrix(0,T,2)
+Delta=matrix(0,T,2)
+Delta[1,]=rnorm(2,0,sqrt(s2))
+for(t in 2:T){
+  Delta[t,]=rmvnorm(1,M%*%Delta[t-1,],s2*diag(2))
+  MU[t,]=MU[t-1,]+Delta[t,]
+}
+
+X[,i] <- MU[,1]
+Y[,i] <- MU[,2]
+R[,i] <- apply(MU^2,1,sum)
+}
+
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+df <- data.frame(x = X[20,], y = Y[20,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[50,], y = Y[50,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-150,150) + ylim(-150,150) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+
+df <- data.frame(x = X[200,], y = Y[200,])
+p <- ggplot(df, aes(x, y)) + geom_point(alpha = 0.1) + theme_classic() + xlim(-300,300) + ylim(-300,300) + coord_equal()
+ggExtra::ggMarginal(p, type = "histogram")
+```
+
+Squared displacement
+```{r}
+ql <- apply(R,1, quantile)
+op <- par(cex.lab = 1.2, cex.axis = 1, bty = "n", las = 1)
+plot(ql[3,], type = "l", lwd = 3, xlim = c(0,100), 
+     ylim = c(0, 10000), xlab="time", ylab="squared displacement")
+for(i in 1:200) lines(R[,i], lwd = 0.5, col = gray(0.5,0.5))
+lines(ql[4,])
+lines(ql[2,])
+lines(ql[3,], lwd = 3)
+par(op)
+```
+
