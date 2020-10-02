@@ -98,8 +98,13 @@ fit <- stan(file = "Stan_code/crw_oe.stan",
             )
 ```
 
-Let's make sure that everything has converged and then plot posteriors and true movement parameter values as well as the magnitude of the error
+Let's make sure that everything has converged (`Rhat`) and that we have reasonable samples from the posteriors (`n_eff`)
 
+```{r}
+print(fit, pars = c("m", "rho", "scale", "shape", "sigma"))
+```
+
+Now we plot posteriors and true movement parameter values as well as the magnitude of the error
 ```{r}
 plot(fit, plotfun = "rhat")
 
