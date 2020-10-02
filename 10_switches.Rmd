@@ -1,0 +1,400 @@
+---
+title: "Discrete time multi-state movement models"
+author: "jmm"
+date: "10/02/2020"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2, width = 150)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo=TRUE, 
+                      warning=FALSE, 
+                      message=FALSE, 
+                      fig.width=12, fig.height=4.5)
+```
+
+## Models with more than one movement state. 
+
+We start with a simple mixture model where each state is characterized by different parameters for step lengt (Weibull) and turning angles (wrapped Cauchy). That is, we specify our random walk as
+
+
+\begin{align}      
+  r_t &\sim \text{Weibull}(a_t, b_t) \; , \notag \\ 
+  \theta_t &\sim \text{WrapCauchy}(m_t, \rho_t) \; , 
+\end{align}      
+
+
+Then, if we have an independent mixture of two movement states the probability of being in state $1$ at any time $t$ is fixed and independent of states at $t-1$, $t-2$,... 
+
+Our model is:
+$$
+\begin{align}
+    a_t &= 
+    \begin{cases}
+      a_1 &\mbox{if } z_t = 1 \\
+      a_2 &\mbox{if } z_t = 0 
+    \end{cases}\; , \\
+    b_t &= 
+    \begin{cases}
+      b_1 &\mbox{if } z_t = 1 \\
+      b_2 &\mbox{if } z_t = 0 
+    \end{cases}\; , \\
+    m_t &= 
+    \begin{cases}
+      m_1 &\mbox{if } z_t = 1 \\
+      m_2 &\mbox{if } z_t = 0 
+    \end{cases}\; , \\
+    \rho_t &= 
+    \begin{cases}
+      \rho_1 &\mbox{if } z_t = 1 \\
+      \rho_2 &\mbox{if } z_t = 0 
+    \end{cases}\; , 
+\end{align}
+$$
+
+where $z_t$ is a hidden variable modelled as $z_t \sim \text{Bern}(p)$
+
+```{r, fig.height=6, fig.width=8}
+library(CircStats)
+library(ggplot2)
+set.seed(12)
+T <- 200
+a <- c(1, 5)
+b <- c(1, 2)
+m <- c(pi, 0)
+rho <- c(0.5, 0.8)
+p <- 0.2
+
+MU <- matrix(0, T, 2)
+z <- numeric(T)
+
+phi <- runif(1, 0, 2 * pi)
+z[1] <- rbinom(1, size = 1, prob = p) + 1
+
+for(t in 2:T){
+  z[t] <- rbinom(1, size = 1, prob = p) + 1
+  tmp <- rwrpcauchy(1, location = m[z[t]], rho = rho[z[t]])
+  if (tmp > pi) 
+    tmp <- tmp - 2 * pi
+  if (tmp < -pi) 
+    tmp <- tmp + 2 * pi
+  phi <- phi + tmp
+  s <- rweibull(1, shape = b[z[t]], scale = a[z[t]]) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t, ] <- MU[t-1, ] + move
+}
+
+pal <- c("#f03b20","#2ca25f")
+
+
+plot(MU, type = "l", asp = 1, xlab="", ylab="", lwd = 1,
+     cex.lab = 1.2 , bty = "n", las = 1) 
+for(i in 2:T){
+  lines(MU[(i-1):i,], col=pal[z[i]])
+}
+ 
+```
+
+Lets look at the time series of movement states
+
+```{r, fig.height=3, fig.width=7}
+plot(z - 1, type = "s", xlab = "time", ylab = "z", yaxt = "n",
+     cex.lab = 1.2 , bty = "n", las = 1, mar=c(5,4,8,1))
+axis(side = 2, at = c(0, 1))
+```
+
+We can see that there are many changes between movement states and that they seem to occur at random times.
+
+Let's fit a mixture model to the time series of steps and turns (see `mix.stan`). 
+
+```{r}
+library(moveHMM)
+datos <- prepData(data.frame(MU),type="UTM",coordNames=c("X1","X2"))
+
+# remove NAs
+datos$step[is.na(datos$step)] <- -100
+datos$angle[is.na(datos$angle)] <- -100
+
+stan.data <- list(T = nrow(datos), 
+                  N = 2,
+                  steps = datos$step, 
+                  turns = datos$angle,
+                  lb = 0.7)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file = "Stan_code/mix.stan", 
+            data = stan.data,
+            iter = 500, 
+            chains = 3, 
+            seed = 1
+            )
+```
+
+Before anything, we need to check that the chains have converged (`Rhat` $< 1.1$), and that we have a decent sample size of the posteriors (`n_eff`). Then we can look at the posteriors for the parameters governing steps and turns
+
+```{r}
+print(fit, pars = c("mu", "rho", "shape", "scale", "p"))
+```
+
+Let's plot the posteriors
+```{r, fig.width=10}
+plot(fit, pars = list("mu", "rho", "shape", "scale", "p"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+
+```
+
+We can compare posteriors to true parameter values
+```{r}
+m.pars <- extract(fit, pars = c("mu", "rho", "scale", "shape", "p"))
+
+op <- par(mar = c(5, 4, 1, 2) + 0.1, cex.lab = 1.2, bty = "n", las = 1)
+
+layout(matrix(1:9,3,3, byrow = TRUE))
+plot(density(m.pars$mu[,1]), main="", xlab=expression(mu[1]))
+abline(v=m[1], lwd=2)
+plot(density(m.pars$mu[,2]), main="", xlab=expression(mu[2]))
+abline(v=m[2], lwd=2)
+plot(density(m.pars$rho[,1]), main="", xlab=expression(rho[1]))
+abline(v=rho[1], lwd=2)
+plot(density(m.pars$rho[,2]), main="", xlab=expression(rho[2]))
+abline(v=rho[2], lwd=2)
+plot(density(m.pars$scale[,1]), main="", xlab="scale")
+abline(v=a[1], lwd=2)
+plot(density(m.pars$scale[,2]), main="", xlab="scale")
+abline(v=a[2], lwd=2)
+plot(density(m.pars$shape[,1]), main="", xlab="shape")
+abline(v=b[1], lwd=2)
+plot(density(m.pars$shape[,2]), main="", xlab="shape")
+abline(v=b[2], lwd=2)
+plot(density(m.pars$p[,2]), main="", xlab="p")
+abline(v=p, lwd=2)
+```
+
+And we can look at the classified movement trajectory.
+```{r, fig.width=10, fig.height=8}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+states <- colMeans(psam$stateProbs[,,2])
+ggplot(datos, aes(x,y,col=states)) + 
+  geom_point(size=0.5) +
+  geom_path(size=0.5) +
+  coord_equal()
+```
+
+We can also look at the state probabilities
+```{r, fig.height=3, fig.width=11}
+library(coda)
+sp <- psam$stateProbs[,,2]
+nobs <- ncol(sp)
+ci <- HPDinterval(as.mcmc(sp[,2: (nobs-1)]))
+
+plot(colMeans(sp[,2: (nobs-1)]), type = "s", 
+     xlab = "time", ylab = "z",
+     cex.lab = 1.2 , bty = "n", las = 1) 
+arrows(1:nobs, ci[,1], 1:nobs, ci[,2], length=0.025,
+       angle=90, code=3, col="gray")
+```
+
+Compare true states to estimated ones
+```{r}
+plot(jitter(z[-1]), states[-200]+1, col = gray(0.5,0.5), 
+     pch=16, xlab = "jittered z", ylab = "mean posterior state",
+     cex.lab = 1.2 , bty = "n", las = 1)
+```
+
+***
+## Mixture model with covariates
+
+Lets simulate a raster map of say "food availability" 
+
+```{r}
+library (raster)  
+set.seed(2)
+side <- 200
+E <- raster(nrows=side, ncols=side, xmn=0, xmx=side, ymn=0, ymx=side)  
+E[] <- runif(side*side, -8, 16)  
+E <- focal(E, w=matrix(1, 11, 11), mean)  
+E <- focal(E, w=matrix(1, 11, 11), mean)  
+plot(E)  
+E.m = cellStats(E, "mean")
+E.sd = cellStats(E, "sd")
+E.scale <- (E - E.m) / E.sd
+plot(E.scale)  
+```
+
+Now a trajectory where movement state depends on local food availability as
+
+$$
+\begin{align}
+z_t \sim \text{Bern}(p_t) \\
+\text{logit}(p_t) = \alpha + \mathbf{E}_t \boldsymbol\beta,
+\end{align}
+$$
+
+```{r}
+set.seed(123)
+T <- 200
+a <- c(1, 5)
+b <- c(1, 2)
+m <- c(pi, 0)
+rho <- c(0.5, 0.8)
+p <- 0.2
+b0 <- 0
+b1 <- -2
+
+MU <- matrix(0, T, 2)
+z <- numeric(T)+1
+env <- numeric(T)
+phi <- runif(1, 0, 2 * pi)
+#z[1] <- rbinom(1, size = 1, prob = p) + 1
+MU[1, ] <- side/2
+
+for(t in 1:(T-1)){
+  env[t] <- raster::extract(E.scale, matrix(MU[t,],1,2))
+  if(!is.na(env[t])) p <- plogis(b0 + b1 * env[t])
+  z[t] <- rbinom(1, size = 1, prob = p) + 1
+  tmp <- rwrpcauchy(1, location = m[z[t]], rho = rho[z[t]])
+  if (tmp > pi) 
+    tmp <- tmp - 2 * pi
+  if (tmp < -pi) 
+    tmp <- tmp + 2 * pi
+  phi <- phi + tmp
+  s <- rweibull(1, shape = b[z[t]], scale = a[z[t]]) 
+  move <- s * c(Re(exp((0+1i) * phi)), Im(exp((0+1i) * phi)))
+  MU[t+1, ] <- MU[t, ] + move
+}
+
+plot(E.scale)
+#lines(MU, type = "l", asp = 1, xlab="", ylab="", lwd=1) #, xaxt='n', yaxt='n')
+for(i in 2:T){
+  lines(MU[(i-1):i,], col = pal[z[i]], lwd = 2,
+        bty = "n", las=1)
+}
+```
+
+We can see that there is more structure in the time series of states
+```{r, fig.height=3, fig.width=11}
+
+plot(z-1, type = "s", xlab = "time", ylab = "z", yaxt="n",
+     cex.lab = 1.2 ,  bty = "n", las = 1, mar=c(5,4,8,1))
+axis(side=2, at=c(0,1))
+
+```
+
+Fit a mix model with covariates (see file `mix_cov.stan`)
+```{r}
+datos <- prepData(data.frame(MU, env),type="UTM",coordNames=c("X1","X2"))
+
+# remove NAs
+datos$step[is.na(datos$step)] <- -100
+datos$angle[is.na(datos$angle)] <- -100
+
+stan.data <- list(T = nrow(datos), 
+                  N = 2,
+                  steps = datos$step, 
+                  turns = datos$angle, 
+                  nCovs = 1, 
+                  covs = as.matrix(env),
+                  lb = 0.8)
+
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file = "Stan_code/mix_cov.stan", 
+            data = stan.data,
+            iter = 1000, 
+            chains = 3,
+            seed = 123
+            )
+```
+
+As usual, we need to check that the chains have converged (`Rhat` $< 1.1$), and that we have a decent sample size of the posteriors (`n_eff`). Then we can look at the posteriors for the parameters governing steps and turns
+
+```{r}
+print(fit, pars = c("mu", "rho", "shape", "scale", "alpha", "beta"))
+```
+
+Let's plot the posteriors
+```{r, fig.width=10}
+plot(fit, pars = list("mu", "rho", "shape", "scale", "alpha", "beta"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+
+```
+
+
+We can compare posteriors to true parameter values
+
+```{r}
+m.pars <- rstan::extract(fit, pars = c("mu", "rho", "scale", "shape", "alpha", "beta"))
+
+op <- par(mar = c(5, 4, 1, 2) + 0.1, cex.lab = 1.2, bty = "n", las = 1)
+
+layout(matrix(1:10,5,2, byrow = TRUE))
+plot(density(m.pars$mu[,1]), main="", xlab=expression(mu[1]))
+abline(v=m[1], lwd=2)
+plot(density(m.pars$mu[,2]), main="", xlab=expression(mu[2]))
+abline(v=m[2], lwd=2)
+plot(density(m.pars$rho[,1]), main="", xlab=expression(rho[1]))
+abline(v=rho[1], lwd=2)
+plot(density(m.pars$rho[,2]), main="", xlab=expression(rho[2]))
+abline(v=rho[2], lwd=2)
+plot(density(m.pars$scale[,1]), main="", xlab="scale")
+abline(v=a[1], lwd=2)
+plot(density(m.pars$scale[,2]), main="", xlab="scale")
+abline(v=a[2], lwd=2)
+plot(density(m.pars$shape[,1]), main="", xlab="shape")
+abline(v=b[1], lwd=2)
+plot(density(m.pars$shape[,2]), main="", xlab="shape")
+abline(v=b[2], lwd=2)
+plot(density(m.pars$alpha), main="", xlab=expression(alpha))
+abline(v=b0, lwd=2)
+plot(density(m.pars$beta), main="", xlab=expression(beta))
+abline(v=b1, lwd=2)
+```
+
+And we can look at the classified movement trajectory.
+```{r, fig.width=10, fig.height=8}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+states <- colMeans(psam$stateProbs[,,2])
+ggplot(datos, aes(x,y,col=states)) + 
+  geom_point(size=0.5) +
+  geom_path(size=0.5) +
+  coord_equal()
+```
+
+We can also look at the state probabilities
+```{r, fig.height=3, fig.width=11}
+library(coda)
+sp <- psam$stateProbs[,,2]
+nobs <- ncol(sp)
+ci <- HPDinterval(as.mcmc(sp[,2: (nobs-1)]))
+
+plot(colMeans(sp[,2: (nobs-1)]), type = "s", 
+     xlab = "time", ylab = "z",
+     cex.lab = 1.2 , bty = "n", las = 1) 
+arrows(1:nobs, ci[,1], 1:nobs, ci[,2], length=0.025,
+       angle=90, code=3, col="gray")
+```
+
+Compare true states to estimated ones
+```{r}
+plot(jitter(z[-1]), states[-200]+1, col = gray(0.5,0.5), 
+     pch=16, xlab = "jittered z", ylab = "mean posterior state",
+     cex.lab = 1.2 , bty = "n", las = 1)
+```
+
