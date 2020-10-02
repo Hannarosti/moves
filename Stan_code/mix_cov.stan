@@ -24,32 +24,32 @@ parameters {
   vector<lower=0, upper=1>[N] rho;
   positive_ordered[N] mu_step;
   vector<lower=lb>[N] shape;
-  //simplex[N] theta;
+  //simplex[N] p;
   real alpha;
   vector[nCovs] beta;
 }  
 
 transformed parameters {
   vector<lower=0>[N] scale;
-  vector[N] log_theta[T];
-  vector[T] theta;
+  vector[N] log_p[T];
+  vector[T] p;
   
   // get scale from mean (Weibull)
   for(n in 1:N){
     scale[n] = exp(log(mu_step[n]) + lgamma(1 + 1/shape[n]));
   }
   
-  theta = inv_logit(covs * beta + alpha);
+  p = inv_logit(covs * beta + alpha);
   
   for(t in 1:T){
-    log_theta[t,1] = log(1-theta[t]);
-    log_theta[t,2] = log(theta[t]);
+    log_p[t,1] = log(1-p[t]);
+    log_p[t,2] = log(p[t]);
   }
   
 }
 
 model {
-  //vector[N] log_theta; 
+  //vector[N] log_p; 
   // priors
   rho ~ beta(1, 1);
   mu[1] ~ normal(pi(),0.5);
@@ -57,12 +57,12 @@ model {
   shape ~ gamma(12, 6);
   mu_step[1] ~ normal(1, 1);
   mu_step[2] ~ normal(5, 1);
-  alpha ~ normal(1,1);
-  beta ~ normal(0,2);
+  alpha ~ normal(1,2);
+  beta ~ normal(0,1);
     // likelihood computation
     for (t in 1:T) {
       if(steps[t]>=0 && turns[t]>-pi() ){
-        vector[N] lps = log_theta[t];
+        vector[N] lps = log_p[t];
         for(n in 1:N){
           lps[n] += weibull_lpdf(steps[t] | shape[n], scale[n]) +
             wrappedCauchy_lpdf(turns[t] | mu[n], rho[n]);
@@ -74,21 +74,21 @@ model {
 
 generated quantities {
     matrix[T,N] stateProbs;
-    real log_p[T,N];
-//    vector[N] log_theta = log(theta);
+    real lp[T,N];
+//    vector[N] log_p = log(p);
     for(t in 1:T){
       for(n in 1:N){
         stateProbs[t,n] = negative_infinity();
-        log_p[t,n] = 0;
+        lp[t,n] = 0;
         if(steps[t]>=0 && turns[t]>-pi() ){
-          log_p[t,n] = log_theta[t,n] +
+          lp[t,n] = log_p[t,n] +
           weibull_lpdf(steps[t] | shape[n], scale[n]) +
           wrappedCauchy_lpdf(turns[t] | mu[n], rho[n]);
         }
       }
       for(i in 1:N){
         if(steps[t]>=0 && turns[t]>-pi()){
-          stateProbs[t,i] = exp(log_p[t,i])/(exp(log_sum_exp(log_p[t,])));
+          stateProbs[t,i] = exp(lp[t,i])/(exp(log_sum_exp(lp[t,])));
         }
       }
     }

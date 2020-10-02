@@ -7,8 +7,8 @@ functions{
 
 data {
   int<lower=0> T;   // length of the time series
-  vector[T] xo;
-  vector[T] yo;
+  vector[T] xo;     // observed x coordinates (UTM)
+  vector[T] yo;     // observed y coordinates (UTM)
 }
 
 parameters {
@@ -16,10 +16,10 @@ parameters {
   real<lower=-pi(), upper=pi()> m;
   real<lower=0> shape;
   real<lower=0> scale;
-  real<lower=0> sigma;
+  real<lower=0> sigma;  // measurement error
   vector<lower=0>[T] steps;
-  vector[T] h;
-  real x1;
+  vector[T] h;  // headings
+  real x1;      // initial location
   real y1;
   
 }
@@ -43,8 +43,8 @@ model {
   yo[1] ~ normal(y[1], sigma);
   m ~ normal(0,0.5);
   rho ~ beta(4,1);
-  scale ~ normal(0,1);
-  shape ~ gamma(2,1);
+  scale ~ gamma(4,4);
+  shape ~ gamma(6,4);
   
   for(i in 2:T){
     steps[i-1] ~ weibull(shape, scale);
