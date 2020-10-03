@@ -20,9 +20,10 @@ library(bookdown)
 options(figure_counter = FALSE, digits = 2, width = 150)
 opts_knit$set(eval.after='fig.cap')
 knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
-                      echo=TRUE, 
-                      warning=FALSE, 
-                      message=FALSE, 
+                      echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      cache = TRUE,
                       fig.width=12, fig.height=4.5)
 ```
 
@@ -221,7 +222,7 @@ plot(jitter(z[-1]), states[-200]+1, col = gray(0.5,0.5),
 
 Lets simulate a raster map of say "food availability" 
 
-```{r}
+```{r,  fig.height=6, fig.width=6}
 library (raster)  
 set.seed(2)
 side <- 200
@@ -245,7 +246,7 @@ z_t \sim \text{Bern}(p_t) \\
 \end{align}
 $$
 
-```{r}
+```{r, fig.height=6, fig.width=6}
 set.seed(123)
 T <- 200
 a <- c(1, 5)
@@ -285,6 +286,7 @@ for(i in 2:T){
         bty = "n", las=1)
 }
 ```
+
 
 We can see that there is more structure in the time series of states
 ```{r, fig.height=3, fig.width=11}
@@ -330,16 +332,14 @@ print(fit, pars = c("mu", "rho", "shape", "scale", "alpha", "beta"))
 ```
 
 Let's plot the posteriors
-```{r, fig.width=10}
+```{r, fig.width=8}
 plot(fit, pars = list("mu", "rho", "shape", "scale", "alpha", "beta"), 
      show_density = TRUE, ci_level = 0.5, fill_color = "gray")
 
 ```
 
-
 We can compare posteriors to true parameter values
-
-```{r}
+```{r, fig.height=7, fig.width=8}
 m.pars <- rstan::extract(fit, pars = c("mu", "rho", "scale", "shape", "alpha", "beta"))
 
 op <- par(mar = c(5, 4, 1, 2) + 0.1, cex.lab = 1.2, bty = "n", las = 1)
@@ -369,7 +369,7 @@ abline(v=b1, lwd=2)
 
 And we can look at the classified movement trajectory.
 ```{r, fig.width=10, fig.height=8}
-psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+psam <- rstan::extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
 states <- colMeans(psam$stateProbs[,,2])
 ggplot(datos, aes(x,y,col=states)) + 
   geom_point(size=0.5) +
@@ -397,4 +397,20 @@ plot(jitter(z[-1]), states[-200]+1, col = gray(0.5,0.5),
      pch=16, xlab = "jittered z", ylab = "mean posterior state",
      cex.lab = 1.2 , bty = "n", las = 1)
 ```
+Let look at the fitted relationship between the covariate and state probability
+```{r}
+psam <- rstan::extract(fit, pars = c("alpha", "beta"))
 
+plot(-10, xlim = c(-3,3), ylim = c(0, 1), 
+      xlab = "food (centered and standardized)", ylab = "p",
+      cex.lab = 1.2 , bty = "n", las = 1)
+
+for(i in 1:500){
+  curve(plogis(psam$alpha[i] + psam$beta[i] * x), 
+        xlim = c(-3,3), add = TRUE, col = gray(0.5, 0.1))
+}
+
+curve(plogis(mean(psam$alpha) + mean(psam$beta) * x),
+      add = TRUE, lwd = 3)
+      
+```
