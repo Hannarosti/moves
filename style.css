@@ -9,6 +9,10 @@ body {
   font-size: 14pt;
 }
 
+.caption {
+    font-size: 12pt;
+}
+
 code {
   font-family: Menlo, Monaco, "Courier New", monospace;
 }
