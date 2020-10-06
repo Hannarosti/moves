@@ -1,0 +1,338 @@
+---
+title: "Random Effects"
+author: "jmm"
+date: "6/15/2018"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2, width = 150)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      cache = TRUE,
+                      fig.width=12, fig.height=4.5)
+```
+
+## Individual random effects
+
+Lets load the elk data from Morales et al. 2004 and use moveHMM to format the data
+
+```{r}
+library(momentuHMM)
+elkdata = read.table("data/elk_data.txt", header = TRUE)
+datos <- prepData(elkdata, type="UTM", coordNames=c("Easting", "Northing"))
+```
+
+Now we change NAs to out-of-range values and zeroes to a small value. We also transform IDs into a numeric sequence:
+```{r}
+datos$step[is.na(datos$step)] <- -100
+datos$step[which(datos$step==0)] <- 0.001
+datos$angle[is.na(datos$angle)] <- -100
+datos$ID <- as.numeric(datos$ID)
+```
+
+Fit a HMM with individual random effects
+```{r}
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+stan.data <- list(T=nrow(datos), N=2, 
+                  ID=datos$ID, 
+                  J=length(unique(datos$ID)),
+                  steps=datos$step/1000, 
+                  turns=datos$angle,
+                  nCovs=0,
+                  lb = 0.8,
+                  covs=matrix(1,nrow=nrow(datos)))
+
+init_fun <- function() { 
+  list(shape = matrix(1, 2,4), eps = numeric(4)+4, m1_step = numeric(4)+0.3,
+       rho = matrix(0,2,4), mu=matrix(0,2,4)) 
+} 
+
+fit <- stan(file="Stan_code/sw_re.stan", 
+            data=stan.data,
+            iter=500, 
+            chains=3, 
+            seed = 1,
+            control=list(adapt_delta=0.95))
+```
+
+Now we check that the chains have converged (r-hat < 1.1) and look at the posteriors for the parameters governing steps and turns
+```{r}
+rstan_gg_options(fill = "gray") 
+plot(fit, plotfun = "rhat")
+plot(fit, pars = list("mu", "rho", "shape", "scale"), 
+     show_density = TRUE, ci_level = 0.5)
+```
+
+
+Plot Viterbi-decoded tracks
+```{r}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "viterbi", "stateProbs"))
+states <- colMeans(psam$viterbi)
+ggplot(datos, aes(x,y,group=ID,col=states)) + geom_point(size=0.5) +
+    geom_path(size=0.5) + coord_equal()
+```
+
+Plot state probabilities
+```{r}
+sp <- psam$stateProbs
+nobs <- ncol(sp)
+p2 <- sp[,,2]/(sp[,,1]+sp[,,2]) 
+ID <- datos$ID
+tmax <- max(table(ID))
+time <- 1:tmax
+
+library(coda)
+ci <- HPDinterval(as.mcmc(p2))
+
+op <- par(mfrow = c(max(ID),1), mar = c(3,2,1,1), las = 1, bty = "n")
+nf = layout(matrix(c(0,1,0,2,0,3,0,4,0,0),5,2,byrow=TRUE), widths=c(0.1,1), heights=c(1,1,1,1,0.1))
+#layout.show(nf)
+
+for(i in 1:max(ID)){
+  ps <- numeric(tmax) * NA
+  tmp <- which(ID==i)
+  ps[1:length(tmp)] <- colMeans(p2[,tmp])
+  plot(time, ps, pch=16, xlab = "", ylab="")
+  arrows(1:length(tmp),ci[tmp,1],1:length(tmp),ci[tmp,2],length=0.025,
+       angle=90, code=3, col="gray")
+}
+mtext("            Time", side = 1, line = -1.3, outer = TRUE, cex = 1.1)
+mtext("       Probability of State 2", side = 2, line = -1.4, las = 0, outer = TRUE, cex = 1.1)
+par(op)
+
+```
+
+***
+Including covariates (habitat type) 
+```{r}
+covNames <- colnames(datos)[6:ncol(datos)]
+covs = matrix(0, nrow(datos), length(covNames))
+for(i in 1: nrow(datos)){
+  covs[i, which.min(datos[i, 6:ncol(datos)])] = 1
+}
+
+# remove a covariate that was never used
+covs = covs[,-5]
+covs <- as.matrix(cbind(numeric(nrow(datos))+1,covs))
+
+datos$step[is.na(datos$step)] <- -100
+datos$step[which(datos$step==0)] <- 0.001
+datos$angle[is.na(datos$angle)] <- -100
+datos$ID <- as.numeric(datos$ID)
+
+stan.data <- list(T=nrow(datos), 
+                  N=2, 
+                  ID=datos$ID,
+                  J=length(unique(datos$ID)),
+                  steps=datos$step/1000, 
+                  turns=datos$angle,
+                  lb = 0.8,
+                  nCovs=ncol(covs)-1, 
+                  covs=covs)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file="Stan_code/sw_re.stan", 
+            data=stan.data,
+            iter=1000, 
+            chains=3,
+            seed=1,
+            control=list(adapt_delta=0.95))
+
+```
+
+Check that the chains have converged (r-hat < 1.1) and look at the posteriors for the steps and turns
+```{r}
+plot(fit, plotfun = "rhat")
+plot(fit, pars = list("mu", "rho", "shape", "scale"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+```
+
+Look at the posteriors for habitat coefficients
+```{r}
+plot(fit, pars=c("m_beta"))
+```
+
+Not much going on here...
+```{r}
+samp <- as.matrix(fit)
+beta <- samp[,grep("m_beta",colnames(samp))]
+
+# build a design matrix
+gr <- c(0,1)
+DM <- cbind(1, 0, 0,0,0,0,gr,0,0,0)
+# indices of posterior draws to plot (thinned for visualisation purposes)
+idx <- seq(1,nrow(samp),by=1)
+# plot the transition probabilities
+par(mfrow=c(2,2)) 
+for(i in 1:2) {
+for(j in 1:2) {
+tpm <- moveHMM:::trMatrix_rcpp(nbStates=2, beta=t(matrix(colMeans(beta),ncol=ncol(DM))), covs=DM)
+plot(gr, tpm[i,j,], type="l", ylim=c(0,1), lwd=2, xlab="wetland", ylab=paste0("Pr(",i," -> ",j,")")) 
+for(k in idx) {
+tpm <- moveHMM:::trMatrix_rcpp(nbStates=2, beta=t(matrix(beta[k,],ncol=ncol(DM))), covs=DM)
+points(gr, tpm[i,j,], type="l", col=rgb(0,0,0,0.2), lwd=0.2) }
+}
+}
+
+```
+
+***
+
+Including the effect of distance to habitats
+
+```{r}
+covNames <- colnames(datos)[6:ncol(datos)]
+
+for(i in covNames){
+  datos[[i]] <-scale(datos[[i]])
+}
+
+covs <- as.matrix(cbind(numeric(nrow(datos))+1, datos[covNames]))
+
+datos$step[is.na(datos$step)] <- -100
+datos$step[which(datos$step==0)] <- 0.001
+datos$angle[is.na(datos$angle)] <- -100
+datos$ID <- as.numeric(datos$ID)
+
+stan.data <- list(T=nrow(datos), 
+                  N=2, 
+                  ID=datos$ID,
+                  steps=datos$step/1000, 
+                  turns=datos$angle,
+                  lb = 0.8,
+                  nCovs=ncol(covs)-1, 
+                  covs=covs)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file="sw_re.stan", 
+            data=stan.data,
+            iter=500, 
+            chains=3, 
+            seed=1,
+            control=list(adapt_delta=0.95))
+
+```
+
+Again, we check for convergence and look at the posteriors for the parameters for steps and turns
+```{r}
+plot(fit, plotfun = "rhat")
+plot(fit, pars = list("mu", "rho", "shape", "scale"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+```
+
+```{r}
+covNames <- colnames(datos)[6:ncol(datos)]
+for(i in covNames){
+  datos[[i]] <-scale(datos[[i]])
+}
+
+covs <- as.matrix(cbind(numeric(nrow(datos))+1, datos[covNames]))
+
+datos$step[is.na(datos$step)] <- -100
+datos$step[which(datos$step==0)] <- 0.001
+datos$angle[is.na(datos$angle)] <- -100
+datos$ID <- as.numeric(datos$ID)
+
+#tmp <- which(datos$ID==3)
+#datos$Daily_movement_rate.km.day.[which(datos$Daily_movement_rate.km.day. == 0)] <- 0.001
+stan.data <- list(T=nrow(datos), 
+                  N=2, 
+                  ID=datos$ID,
+                  J=length(unique(datos$ID)),
+                  steps=datos$step/1000, 
+                  turns=datos$angle,
+                  lb = 0.8,
+                  nCovs=ncol(covs)-1, 
+                  covs=covs)
+
+init_fun <- function() { 
+  list(shape = matrix(1, 2,4), eps = numeric(4)+4, m1_step = numeric(4)+0.3,
+       rho = matrix(0,2,4), mu=matrix(0,2,4)) 
+} 
+
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file="Stan_code/sw_re.stan", 
+            data=stan.data,
+            iter=500, 
+            chains=3, 
+            seed = 1,
+            control=list(adapt_delta=0.95, 
+                         max_treedepth = 15))
+
+```
+
+Lets check for convergence and look at the posteriors for the parameters for steps and turns
+```{r}
+rstan_gg_options(fill = "gray") #, color = "skyblue4", pt_color = "red")
+plot(fit, plotfun = "rhat")
+plot(fit, pars = list("mu", "rho", "shape", "scale"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+```
+
+
+```{r}
+plot(fit, pars = list( "m_beta"), 
+     show_density = FALSE, ci_level = 0.5, fill_color = "gray")
+```
+
+
+```{r}
+samp <- as.matrix(fit)
+beta <- samp[,grep("m_beta",colnames(samp))]
+
+# build a design matrix
+gridw <- seq(min(datos$dist_ntw),max(datos$dist_ntw),length=100)
+#gridslopesc <- seq(min(scale(data$slope)),max(scale(data$slope)),length=100) fixedtemp <- 10
+DM <- cbind(1, 0, 0,0,0,gridw,0,0,0,0,0)
+# indices of posterior draws to plot (thinned for visualisation purposes)
+ind <- seq(1,nrow(samp),by=2)
+# plot the transition probabilities
+par(mfrow=c(2,2)) 
+for(i in 1:2) {
+for(j in 1:2) {
+tpm <- moveHMM:::trMatrix_rcpp(nbStates=2, beta=t(matrix(colMeans(beta),ncol=ncol(DM))), covs=DM)
+plot(gridw, tpm[i,j,], type="l", ylim=c(0,1), lwd=2, xlab="wetland", ylab=paste0("Pr(",i," -> ",j,")")) 
+for(k in ind) {
+tpm <- moveHMM:::trMatrix_rcpp(nbStates=2, beta=t(matrix(beta[k,],ncol=ncol(DM))), covs=DM)
+points(gridw, tpm[i,j,], type="l", col=rgb(0,0,0,0.2), lwd=0.2) }
+}
+}
+
+```
+
+
+```{r}
+plot(fit, pars = "beta", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+plot(fit, pars = "s_beta", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+plot(fit, pars = "shape", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+plot(fit, pars = "mu", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+plot(fit, pars = "rho", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+plot(fit, pars = "scale", show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+
+```
+
