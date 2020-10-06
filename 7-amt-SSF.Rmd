@@ -29,7 +29,6 @@ The last bit of material "borrowed" (and modified) from the [Movebank workshop](
  
 Load libraries
 ```{r}
-library(ezknitr)
 library(lubridate)
 library(raster)
 library(move)
