@@ -1,0 +1,460 @@
+---
+title: "Mixtures and HHMs"
+author: "jmm"
+date: "jun2 2018"
+output:
+  bookdown::html_document2:
+    css: style.css
+    number_sections: false
+    theme: default
+    highlight: haddock
+    toc: true
+    toc_float: true
+bibliography: moves.bib
+csl: ecology.csl
+---
+
+```{r, echo=FALSE}
+library(knitr)
+library(bookdown)
+options(figure_counter = FALSE, digits = 2, width = 150)
+opts_knit$set(eval.after='fig.cap')
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), 
+                      echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      cache = TRUE,
+                      fig.width=12, fig.height=4.5)
+```
+
+## Mixtures of random walks and HMMs
+
+Lets load the elk data from @Morales:04 and use `momentuHMM` to format the data
+
+```{r}
+library(momentuHMM)
+elkdata = read.table("data/elk_data.txt", header = TRUE)
+datos <- prepData(elkdata,type="UTM",coordNames=c("Easting","Northing"))
+```
+
+Now we change `NA`s to out-of-range values and zeroes to a small value. We also transform the original `ID`s into a numeric sequence:
+
+```{r}
+datos$step[is.na(datos$step)] <- -100
+datos$step[which(datos$step==0)] <- 0.001
+datos$angle[is.na(datos$angle)] <- -100
+datos$ID <- as.numeric(datos$ID)
+```
+
+First we'll fit a mixture model where there are two movement states. We start by modelling the movement of one of the animals
+
+
+```{r}
+tmp <- which(datos$ID == 1)
+
+stan.data <- list(T = nrow(datos[tmp,]), 
+                  N = 2,
+                  steps = datos$step[tmp]/1000, 
+                  turns = datos$angle[tmp], 
+                  lb = 0.75)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file = "Stan_code/mix.stan", 
+            data = stan.data,
+            iter = 1000, 
+            chains = 3
+            )
+```
+
+Now we check that the chains have converged (`Rhat` $< 1.1$), and that we have a decent sample size of the posteriors (`n_eff`). Then we can look at the posteriors for the parameters governing steps and turns
+
+```{r, fig.width=8, fig.height=6}
+print(fit, pars = c("mu", "rho", "shape", "scale", "p"))
+
+plot(fit, pars = list("mu", "rho", "mu_step", "shape", "scale"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+```
+
+Lets look at the movement trajectory according to states
+```{r, fig.height=6, fig.width=6}
+tmp <- which(datos$ID == 1)
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+states <- colMeans(psam$stateProbs[,,2])
+dfs <- datos[tmp,]
+ggplot(dfs, aes(x,y,group=ID, col=states)) + 
+  geom_point(size=0.5) +
+  geom_path(size=0.5) + 
+  coord_equal()
+```
+
+
+
+We can also look at the estimated state probabilities
+```{r, fig.height=3, fig.width=7}
+library(coda)
+sp <- psam$stateProbs[,,2]
+nobs <- ncol(sp)
+ci <- HPDinterval(as.mcmc(sp[,2: (nobs-1)]))
+
+plot(colMeans(sp[,2: (nobs-1)]), type = "s", 
+     xlab = "time", ylab = "z",
+     cex.lab = 1.2, bty = "n", las = 1)
+arrows(1:nobs, ci[,1], 1:nobs, ci[,2], 
+       length=0.025, angle=90, code=3, col="gray")
+```
+
+Lets see how the step and turn densities look like for each state:
+```{r, fig.width=6}
+library(CircStats)
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+shape <- psam$shape
+scale <- psam$scale
+mu <- psam$mu
+rho <- psam$rho
+
+pal <- c("#f03b20","#2ca25f")
+tmp <- which(datos$ID == 1)
+steps=datos$step[tmp]/1000
+steps[steps<0] <- NA
+turns=datos$angle[tmp]
+turns[turns < -pi] <- NA
+
+stepgrid <- seq(min(steps,na.rm=TRUE), max(steps,na.rm=TRUE), length=1000)
+
+hist(steps, prob=TRUE, col="grey", border=FALSE, 
+     breaks=30, ylim=c(0,0.5), main = "",
+     cex.lab = 1.3, las = 1, bty = "n")
+for(i in 1:500){
+  lines(stepgrid, dweibull(stepgrid, shape=shape[i,1],
+                           scale=scale[i,1]), 
+        col = rgb(215/255,25/255,28/255, 0.2), lwd=0.2)
+  lines(stepgrid, dweibull(stepgrid, shape=shape[i,2],
+                           scale=scale[i,2]), 
+        col = rgb(26/255,150/255,65/255, 0.2), lwd=0.2)
+  
+}
+lines(stepgrid, dweibull(stepgrid, shape=colMeans(shape)[1], 
+                         scale=colMeans(scale)[1]), 
+      col = pal[1], lwd=2)
+lines(stepgrid, dweibull(stepgrid, shape=colMeans(shape)[2], 
+                         scale=colMeans(scale)[2]), 
+      col = pal[2], lwd=2)
+
+hist(turns, prob=TRUE, col="grey", border=FALSE, breaks=30, 
+     main="", xlim=c(-pi,pi), ylim = c(0, 0.6),
+     cex.lab = 1.3, las = 1, bty = "n")
+turngrid <- seq(-pi, pi, length.out = 1000)
+for(i in 1:500){
+  lines(turngrid, dwrpcauchy(turngrid, mu = mu[i,1], 
+                 rho = rho[i,1]), 
+        col = rgb(215/255,25/255,28/255, 0.2), lwd=0.2)
+    lines(turngrid, dwrpcauchy(turngrid, mu = mu[i,2], 
+                 rho = rho[i,2]), 
+          col = rgb(26/255,150/255,65/255, 0.2), lwd=0.2)
+  }
+
+lines(turngrid, 
+      dwrpcauchy(turngrid, mu = colMeans(mu)[1], 
+                 rho = colMeans(rho)[1]), col = pal[1], lwd=2)
+lines(turngrid, 
+      dwrpcauchy(turngrid, mu = colMeans(mu)[2], 
+                 rho = colMeans(rho)[2]), col = pal[2], lwd=2)
+```
+
+
+We can do a posterior predictive check on step autocorrelation
+
+```{r}
+tmp <- which(datos$ID == 1)
+T <- nrow(datos[tmp,])
+steps <- datos$step[tmp]/1000
+
+n.sims <- nrow(psam$mu) 
+
+ppsteps <- matrix(NA,n.sims,T)
+
+p2 <- psam$stateProbs[,,2]
+nobs <- ncol(p2)
+scale <- psam$scale
+shape <- psam$shape
+mu <- psam$mu
+rho <- psam$rho
+
+for(i in 1:n.sims){
+  z <- rbinom(nobs-2, size = 1, prob = p2[i,2:(nobs-1)]) + 1
+  ppsteps[i,] = rweibull(T,shape=shape[i,z],scale=scale[i,z])  
+  #ppturns[i,] = rwrpcauchy(T, location  = (mu[i,z]), rho = rho[i,z])
+}
+
+nlags <- 61 
+oac = acf(steps[2:(T-1)],lag.max=(nlags-1),plot=FALSE)  #  ACF observada
+
+ppac = matrix(NA,n.sims,nlags)
+for(i in 1:n.sims){
+ppac[i,] = acf(ppsteps[i,],lag.max=(nlags-1),plot=FALSE)$acf
+}
+
+library(coda)
+hpd <- HPDinterval(as.mcmc(ppac), prob = 0.9)
+
+dat <- data.frame(y = 1:61, acf = as.numeric(oac$acf), 
+                  lb = hpd[, 1], ub = hpd[, 2])
+ggplot(dat, aes(y, acf)) + 
+geom_ribbon(aes(x = y, ymin = lb, ymax = ub), fill = "grey70", alpha = 0.5) +
+geom_point(col = "black", size = 1) + 
+  geom_line() + 
+coord_cartesian(xlim = c(2, 60), ylim = c(-0.2, 0.7)) + 
+xlab("Lag") + ylab("ACF") + 
+ggtitle("Observed Autocorrelation
+          with 90% CI for ACF of Predicted Quantities")
+``` 
+
+
+
+
+
+But the mixture model does not consider the temporal structure in the data. 
+Let's fit then an HHM
+```{r}
+tmp <- which(datos$ID == 1)
+stan.data <- list(T=nrow(datos[tmp,]), 
+                  N=2, 
+                  ID=datos$ID[tmp],
+                  steps=datos$step[tmp]/1000, 
+                  turns=datos$angle[tmp],
+                  lb = 0.75)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+fit <- stan(file="Stan_code/hmm.stan", 
+            data=stan.data,
+            iter=1000, 
+            chains=3)
+```
+
+Again, we check for convergence and look at the posteriors for the parameters for steps and turns
+
+```{r}
+print(fit, pars = c("mu", "rho", "shape", "scale", "g"))
+
+plot(fit, pars = list("mu", "rho", "shape", "scale", "g"), 
+     show_density = TRUE, ci_level = 0.5, fill_color = "gray")
+
+```
+
+Now we plot the movement trajectory according to states
+```{r, fig.height=6, fig.width=6}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "viterbi"))
+states <- colMeans(psam$viterbi)
+dfs <- datos[tmp,]
+ggplot(dfs, aes(x,y,group=ID,col=states)) + geom_point(size=0.5) +
+    geom_path(size=0.5) + coord_equal()
+```
+
+
+Plot state probabilities
+```{r, fig.height=3, fig.width=7}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+library(coda)
+sp <- psam$stateProbs
+p2 <- sp[,,2]/(sp[,,1]+sp[,,2]) # prob of state = 2
+nobs <- ncol(sp)
+ci <- HPDinterval(as.mcmc(p2[,2: (nobs-1)]))
+
+plot(colMeans(p2[,2: (nobs-1)]), type = "s", xlab = "time", ylab = "z") #, pch=19,cex=0.4)
+arrows(1:nobs,ci[,1],1:nobs,ci[,2],length=0.025,
+       angle=90, code=3, col="gray")
+```
+
+ Lets see how the step densities look like for each state:
+ Lets see how the step and turn densities look like for each state:
+```{r, fig.width=6}
+library(CircStats)
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "stateProbs"))
+shape <- psam$shape
+scale <- psam$scale
+mu <- psam$mu
+rho <- psam$rho
+
+pal <- c("#f03b20","#2ca25f")
+tmp <- which(datos$ID == 1)
+steps=datos$step[tmp]/1000
+steps[steps<0] <- NA
+turns=datos$angle[tmp]
+turns[turns < -pi] <- NA
+
+stepgrid <- seq(min(steps,na.rm=TRUE), max(steps,na.rm=TRUE), length=1000)
+
+hist(steps, prob=TRUE, col="grey", border=FALSE, 
+     breaks=30, ylim=c(0,0.5), main = "",
+     cex.lab = 1.3, las = 1, bty = "n")
+for(i in 1:500){
+  lines(stepgrid, dweibull(stepgrid, shape=shape[i,1],
+                           scale=scale[i,1]), 
+        col = rgb(215/255,25/255,28/255, 0.2), lwd=0.2)
+  lines(stepgrid, dweibull(stepgrid, shape=shape[i,2],
+                           scale=scale[i,2]), 
+        col = rgb(26/255,150/255,65/255, 0.2), lwd=0.2)
+  
+}
+lines(stepgrid, dweibull(stepgrid, shape=colMeans(shape)[1], 
+                         scale=colMeans(scale)[1]), 
+      col = pal[1], lwd=2)
+lines(stepgrid, dweibull(stepgrid, shape=colMeans(shape)[2], 
+                         scale=colMeans(scale)[2]), 
+      col = pal[2], lwd=2)
+
+hist(turns, prob=TRUE, col="grey", border=FALSE, breaks=30, 
+     main="", xlim=c(-pi,pi), ylim = c(0, 0.6),
+     cex.lab = 1.3, las = 1, bty = "n")
+turngrid <- seq(-pi, pi, length.out = 1000)
+for(i in 1:500){
+  lines(turngrid, dwrpcauchy(turngrid, mu = mu[i,1], 
+                 rho = rho[i,1]), 
+        col = rgb(215/255,25/255,28/255, 0.2), lwd=0.2)
+    lines(turngrid, dwrpcauchy(turngrid, mu = mu[i,2], 
+                 rho = rho[i,2]), 
+          col = rgb(26/255,150/255,65/255, 0.2), lwd=0.2)
+  }
+
+lines(turngrid, 
+      dwrpcauchy(turngrid, mu = colMeans(mu)[1], 
+                 rho = colMeans(rho)[1]), col = pal[1], lwd=2)
+lines(turngrid, 
+      dwrpcauchy(turngrid, mu = colMeans(mu)[2], 
+                 rho = colMeans(rho)[2]), col = pal[2], lwd=2)
+```
+
+ppcheck on step autocorrelation
+```{r}
+psam <- extract(fit, pars = c("mu", "rho", "scale", "shape", "viterbi"))
+tmp <- which(datos$ID == 1)
+T <- nrow(datos[tmp,])
+steps <- datos$step[tmp]/1000
+
+n.sims <- nrow(psam$mu) 
+
+ppsteps <- matrix(NA,n.sims,T)
+#ppturns <- matrix(NA,n.sims,T)
+
+p2 <- psam$viterbi
+nobs <- ncol(p2)
+scale <- psam$scale
+shape <- psam$shape
+mu <- psam$mu
+rho <- psam$rho
+
+for(i in 1:n.sims){
+  z <- p2[i,]
+  ppsteps[i,] = rweibull(T,shape=shape[i,z],scale=scale[i,z])  
+#  ppturns[i,] = rwrpcauchy(T, location  = (mu[i,z]), rho = rho[i,z])
+}
+
+nlags <- 61 
+oac = acf(steps[2:(T-1)],lag.max=(nlags-1),plot=FALSE)  #  ACF observada
+
+ppac = matrix(NA,n.sims,nlags)
+for(i in 1:n.sims){
+ppac[i,] = acf(ppsteps[i,],lag.max=(nlags-1),plot=FALSE)$acf
+}
+
+library(coda)
+hpd <- HPDinterval(as.mcmc(ppac), prob = 0.9)
+
+dat <- data.frame(y = 1:61, acf = as.numeric(oac$acf), 
+                  lb = hpd[, 1], ub = hpd[, 2])
+ggplot(dat, aes(y, acf)) + 
+geom_ribbon(aes(x = y, ymin = lb, ymax = ub), fill = "grey70", alpha = 0.5) +
+geom_point(col = "black", size = 1) + 
+  geom_line() + 
+coord_cartesian(xlim = c(2, 60), ylim = c(-0.2, 0.7)) + 
+xlab("Lag") + ylab("ACF") + 
+ggtitle("Observed Autocorrelation
+          with 90% CI for ACF of Predicted Quantities")
+``` 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Posterior predictive checks
+
+```{r}
+library(circular)
+## generate new data sets 
+n.sims <- dim(mu.pos)[1]
+n <- length(datos$step)
+# state sequences
+ppstates <- matrix(NA, nrow = n.sims, ncol = n) # observations
+ppsteps <- matrix(NA, nrow = n.sims, ncol = n) 
+ppangs <- matrix(NA, nrow = n.sims, ncol = n)
+
+g.pos <- rstan::extract(fit, pars = "g")$g
+stdist.pos <- rstan::extract(fit, pars = "statdist")$statdist
+
+for (j in 1:n.sims) {
+  tpm <- g.pos[j,,] #   matrix(gs[j,1:(2*N)], N, N)
+  
+  initdist <- stdist.pos[j,]
+  ppstates[j, 1] <- sample(1:N, size = 1, prob = initdist)
+  ppsteps[j, 1] <- rweibull(1, shape = shape.pos[j, ppstates[j, 1]], 
+                            scale = scale.pos[j, ppstates[j, 1]])
+  ppangs[j, 1] <- rwrpcauchy(1, mu.pos[j, ppstates[j, 1]], 
+                             rho = rho.pos[j, ppstates[j, 1]])
+  for (i in 2:n) {
+    ppstates[j,i] <- sample(1:N, size = 1, 
+                            prob = tpm[ppstates[j, i-1], ])
+    ppsteps[j, i] <- rweibull(1, shape = shape.pos[j, ppstates[j, 1]], 
+                              scale = scale.pos[j, ppstates[j, 1]])
+    ppangs[j, i] <- rwrpcauchy(1, mu.pos[j, ppstates[j, 1]], 
+                               rho = rho.pos[j, ppstates[j, 1]])
+  }
+}
+
+for (j in 1:n.sims) ppangs[j, ] <- as.numeric(minusPiPlusPi(as.circular(ppangs[j, ])))
+```
+
+compare distributions
+
+```{r}
+library(bayesplot)
+ppc_dens_overlay(datos$step[which(!is.na(datos$step))],
+                 ppsteps[1:100, which(!is.na(datos$step))])
+
+ppc_dens_overlay(datos$angle[which(!is.na(datos$angle))], ppangs[1:100,which(!is.na(datos$angle))])
+```
+```{r}
+nlags <- 61
+# observed acf
+oac = acf(datos$step[2:(n - 1)], lag.max = (nlags - 1), 
+          plot = FALSE, na.action = na.pass)$acf 
+
+ppac = matrix(NA, n.sims, nlags)
+
+for (i in 1:n.sims) {
+  ppac[i, ] = acf(ppsteps[i, ], lag.max = (nlags - 1), plot = FALSE)$acf
+  }
+hpd.acf <- HPDinterval(as.mcmc(ppac), prob = 0.95)
+dat <- data.frame(y = 1:61, acf = as.numeric(oac), 
+                  lb = hpd.acf[, 1], ub = hpd.acf[, 2])
+ggplot(dat, aes(y, acf)) + 
+geom_ribbon(aes(x = y, ymin = lb, ymax = ub), fill = "grey70", alpha = 0.5) +
+geom_point(col = "purple", size = 1) + geom_line() + 
+coord_cartesian(xlim = c(2, 60), ylim = c(-0.1, 0.5)) + 
+xlab("Lag") + ylab("ACF") + ggtitle("Observed Autocorrelat
+   with 90% CI for ACF of Predicted Quantities")
+```
+
+# References
