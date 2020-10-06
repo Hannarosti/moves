@@ -20,8 +20,3 @@ integrating velocity we can get locations
 $$
 \boldsymbol{\mu}(t) = \boldsymbol{\mu}(0) + \int_0^{t} \mathbf{v}(t')dt'
 $$
-
-```{r}
-library(smoove)
-```
-
