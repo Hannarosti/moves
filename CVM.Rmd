@@ -1,0 +1,27 @@
+---
+title: "CVM"
+author: "jmm"
+date: "8/19/2020"
+output: pdf_document
+bibliography: moves.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+@gurarie2017 present the idea of correlated velocity models.
+
+The idea is to model velocity (rate and directiond of motion) $\mathbf{v}(t)$ 
+integrating velocity we can get locations
+
+$$
+\boldsymbol{\mu}(t) = \boldsymbol{\mu}(0) + \int_0^{t} \mathbf{v}(t')dt'
+$$
+
+```{r}
+library(smoove)
+```
+
