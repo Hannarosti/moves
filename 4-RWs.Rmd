@@ -281,8 +281,6 @@ lines(ql[2,])
 lines(ql[3,], lwd = 3)
 ```
 
-
-
 # Exercises
 
 1. Simulate an VAR(1) random walk and show how the distribution of step lengths changes as $\sigma$ changes
