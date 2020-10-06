@@ -20,24 +20,28 @@ data {
 }
 
 parameters {
-  vector<lower=-1, upper=5>[N] mu; // this allows mu to be centered around pi
+  vector<lower=-1.5, upper=4>[N] mu; // this allows mu to be centered around pi
   vector<lower=0, upper=1>[N] rho;
+  //vector[N] xangle;
+  //vector[N] yangle;
   positive_ordered[N] mu_step;
   vector<lower=lb>[N] shape;
   simplex[N] g[N]; // N x N tpm
 }  
 
 transformed parameters {
+  //vector<lower=-pi(),upper=pi()>[N] mu;
   vector<lower=0>[N] scale;
   vector[N] log_g_tr[N];
   matrix[N, N] ta; //
   simplex[N] statdist; // stationary distribution
   
-  // get scale from mean (Weibull)
+  // get scale from mean (Weibull) 
   for(n in 1:N){
     scale[n] = exp(log(mu_step[n]) + lgamma(1 + 1/shape[n]));
+    //mu[n] = atan2(yangle[n], xangle[n]);
   }
-  
+
   // transpose the tpm and take natural log of entries 
   for (n_from in 1:N){
     for (n in 1:N){
@@ -60,14 +64,14 @@ model {
   vector[N] lp_p1; // for forward variables
   
   // priors
+
+  //xangle ~ normal(0, 0.5);
+  //yangle ~ normal(0, 0.5); // zero if mean angle is 0 or pi
   rho ~ beta(2, 2);
-  mu[1] ~ normal(pi(), 0.25);
-  mu[2] ~ normal(0, 0.25);
+  //mu[1] ~ normal(pi(), 0.25);
+  //mu[2] ~ normal(0, 0.25);
   shape ~ gamma(12, 6);
   mu_step ~ normal(0, 5);
-  
-  
-
   
   // likelihood computation
   for (t in 1:T) {
@@ -94,6 +98,11 @@ generated quantities {
   real stateProbs[T,N];
   vector[N] lp;
   vector[N] lp_p1;
+  // vector[N] circ_mean;
+  // 
+  // for(n in 1:N){
+  //   circ_mean[n] = atan2(sin(mu[n]), cos(mu[n]));
+  // }
   
   // Viterbi algorithm (most likely state sequence)
   {
