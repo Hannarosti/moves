@@ -242,6 +242,10 @@ iso.area <- iso.poly@area
 iso.area/1e+06
 ```
 
-We can also see that, in this case, the convex hull estimate of the mountain lion home range is substantially smaller than the KDE isopleth estimates and captures all of the telemetry data. The researcher must decide which type of home range estimator to use if inference for the home range is desired.  The convex hull method is less subjective, but some would argue that it is also less realistic.     
+We can also see that, in this case, the convex hull estimate of the mountain lion home range is substantially smaller than the KDE isopleth estimates and captures all of the telemetry data. The researcher must decide which type of home range estimator to use if inference for the home range is desired.  The convex hull method is less subjective, but some would argue that it is also less realistic. 
+
+## More stuff
+
+There are more "sophisticated" ways to deal with home ranges such as the local convex hull (`LoCoH`) nonparametric kernel method and it's variations [@Getz:07], and the autocorrelated kernel-density home-range estimation based on continuous time movement models [@Calabrese:16].
 
 ## References
